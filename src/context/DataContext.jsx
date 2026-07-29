@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { products as initialProducts } from "../data/products";
 import { categories as initialCategories } from "../data/categories";
 import { brands as initialBrands } from "../data/brands";
@@ -7,13 +7,15 @@ import { offers as initialOffers } from "../data/offers";
 import { testimonials as initialTestimonials } from "../data/testimonials";
 import { settings as initialSettings } from "../data/settings";
 import { homepage as initialHomepage } from "../data/homepage";
-import { getLocalStorage, setLocalStorage } from "../utils";
+import { getLocalStorage, setLocalStorage, generateId, todayLocalISO } from "../utils";
 import { LOCAL_STORAGE_KEYS } from "../constants";
+import { useAuth } from "./AuthContext";
 import {
   addOrderToFirebase,
   updateOrderStatusInFirebase,
   deleteOrderFromFirebase,
   subscribeToOrders,
+  subscribeToUserOrders,
   syncProductsToFirebase,
   subscribeToProducts,
   syncCategoriesToFirebase,
@@ -24,6 +26,12 @@ import {
   subscribeToOffers,
   syncBannersToFirebase,
   subscribeToBanners,
+  syncTestimonialsToFirebase,
+  subscribeToTestimonials,
+  syncSettingsToFirebase,
+  subscribeToSettings,
+  syncHomepageToFirebase,
+  subscribeToHomepage,
   addStockNotificationRequest,
   getPendingStockNotifications,
   markStockNotificationsSent,
@@ -40,465 +48,527 @@ export const useData = () => {
   return context;
 };
 
+/**
+ * One store collection: seeded from localStorage, kept live by Firebase, and
+ * written back through `commit`.
+ *
+ * `commit` deliberately performs its writes *outside* the state updater. The
+ * previous version called Firebase from inside setState, which React may invoke
+ * more than once — under StrictMode every save fired twice.
+ */
+function useSyncedList({ storageKey, seed, subscribe, sync, label }) {
+  const [items, setItems] = useState(() => getLocalStorage(storageKey, seed));
+
+  // Kept in a ref so `subscribe` never needs to be re-run when items change.
+  const subscribeRef = useRef(subscribe);
+  subscribeRef.current = subscribe;
+
+  useEffect(() => {
+    const unsubscribe = subscribeRef.current((remote) => {
+      // null means the document does not exist yet — keep the seed data.
+      // An empty array is a real value and must be applied, otherwise deleting
+      // the last item never propagates to other browsers.
+      if (!Array.isArray(remote)) return;
+      setItems(remote);
+      setLocalStorage(storageKey, remote);
+    });
+    return () => unsubscribe();
+  }, [storageKey]);
+
+  const commit = useCallback(
+    (next) => {
+      setItems(next);
+      setLocalStorage(storageKey, next);
+      Promise.resolve(sync(next)).catch((error) => {
+        console.error(`Failed to sync ${label}:`, error);
+        toast.error(`Saved on this device, but syncing ${label} to the cloud failed`);
+      });
+      return next;
+    },
+    [storageKey, sync, label]
+  );
+
+  return [items, commit];
+}
+
+/** Same contract as useSyncedList, for the single-object documents. */
+function useSyncedObject({ storageKey, seed, subscribe, sync, label }) {
+  const [value, setValue] = useState(() => getLocalStorage(storageKey, seed));
+
+  const subscribeRef = useRef(subscribe);
+  subscribeRef.current = subscribe;
+
+  useEffect(() => {
+    const unsubscribe = subscribeRef.current((remote) => {
+      if (!remote || typeof remote !== "object") return;
+      setValue(remote);
+      setLocalStorage(storageKey, remote);
+    });
+    return () => unsubscribe();
+  }, [storageKey]);
+
+  const commit = useCallback(
+    (next) => {
+      setValue(next);
+      setLocalStorage(storageKey, next);
+      Promise.resolve(sync(next)).catch((error) => {
+        console.error(`Failed to sync ${label}:`, error);
+        toast.error(`Saved on this device, but syncing ${label} to the cloud failed`);
+      });
+      return next;
+    },
+    [storageKey, sync, label]
+  );
+
+  return [value, commit];
+}
+
 export const DataProvider = ({ children }) => {
-  const [products, setProducts] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, initialProducts)
-  );
-  const [categories, setCategories] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.CATEGORIES, initialCategories)
-  );
-  const [brands, setBrands] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.BRANDS, initialBrands)
-  );
-  const [banners, setBanners] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.BANNERS, initialBanners)
-  );
-  const [offers, setOffers] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.OFFERS, initialOffers)
-  );
-  const [testimonials, setTestimonials] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.TESTIMONIALS, initialTestimonials)
-  );
+  const { user, userRole, isLoading: authLoading } = useAuth();
+  const isAdmin = userRole === "admin";
+
+  const [products, commitProducts] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.PRODUCTS,
+    seed: initialProducts,
+    subscribe: subscribeToProducts,
+    sync: syncProductsToFirebase,
+    label: "products",
+  });
+
+  const [categories, commitCategories] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.CATEGORIES,
+    seed: initialCategories,
+    subscribe: subscribeToCategories,
+    sync: syncCategoriesToFirebase,
+    label: "categories",
+  });
+
+  const [brands, commitBrands] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.BRANDS,
+    seed: initialBrands,
+    subscribe: subscribeToBrands,
+    sync: syncBrandsToFirebase,
+    label: "brands",
+  });
+
+  const [banners, commitBanners] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.BANNERS,
+    seed: initialBanners,
+    subscribe: subscribeToBanners,
+    sync: syncBannersToFirebase,
+    label: "banners",
+  });
+
+  const [offers, commitOffers] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.OFFERS,
+    seed: initialOffers,
+    subscribe: subscribeToOffers,
+    sync: syncOffersToFirebase,
+    label: "offers",
+  });
+
+  const [testimonials, commitTestimonials] = useSyncedList({
+    storageKey: LOCAL_STORAGE_KEYS.TESTIMONIALS,
+    seed: initialTestimonials,
+    subscribe: subscribeToTestimonials,
+    sync: syncTestimonialsToFirebase,
+    label: "testimonials",
+  });
+
+  const [settings, commitSettings] = useSyncedObject({
+    storageKey: LOCAL_STORAGE_KEYS.SETTINGS,
+    seed: initialSettings,
+    subscribe: subscribeToSettings,
+    sync: syncSettingsToFirebase,
+    label: "settings",
+  });
+
+  const [homepage, commitHomepage] = useSyncedObject({
+    storageKey: LOCAL_STORAGE_KEYS.HOMEPAGE,
+    seed: initialHomepage,
+    subscribe: subscribeToHomepage,
+    sync: syncHomepageToFirebase,
+    label: "homepage",
+  });
+
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
-  const [settings, setSettings] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.SETTINGS, initialSettings)
-  );
-  const [homepage, setHomepage] = useState(() => 
-    getLocalStorage(LOCAL_STORAGE_KEYS.HOMEPAGE, initialHomepage)
-  );
-
-  // ========== FIREBASE SUBSCRIPTIONS ==========
-  useEffect(() => {
-    const unsubscribe = subscribeToProducts((firebaseProducts) => {
-      if (firebaseProducts && firebaseProducts.length > 0) {
-        setProducts(firebaseProducts);
-        setLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, firebaseProducts);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToCategories((firebaseCategories) => {
-      if (firebaseCategories && firebaseCategories.length > 0) {
-        setCategories(firebaseCategories);
-        setLocalStorage(LOCAL_STORAGE_KEYS.CATEGORIES, firebaseCategories);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToBrands((firebaseBrands) => {
-      if (firebaseBrands && firebaseBrands.length > 0) {
-        setBrands(firebaseBrands);
-        setLocalStorage(LOCAL_STORAGE_KEYS.BRANDS, firebaseBrands);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToOffers((firebaseOffers) => {
-      if (firebaseOffers && firebaseOffers.length > 0) {
-        setOffers(firebaseOffers);
-        setLocalStorage(LOCAL_STORAGE_KEYS.OFFERS, firebaseOffers);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToBanners((firebaseBanners) => {
-      if (firebaseBanners && firebaseBanners.length > 0) {
-        setBanners(firebaseBanners);
-        setLocalStorage(LOCAL_STORAGE_KEYS.BANNERS, firebaseBanners);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   // ========== ORDERS ==========
+  // Admins watch every order; a signed-in customer watches only their own.
+  // Subscribing to the whole collection as a customer would just collect
+  // permission-denied errors now that firestore.rules is enforced.
   useEffect(() => {
-    setOrdersLoading(true);
-    const localOrders = getLocalStorage(LOCAL_STORAGE_KEYS.ORDERS, []);
-    if (localOrders.length > 0) {
-      const validLocalOrders = localOrders.filter(order => order != null && order.id);
-      setOrders(validLocalOrders);
+    if (authLoading) return undefined;
+
+    if (!user) {
+      setOrders([]);
+      setOrdersLoading(false);
+      return undefined;
     }
 
-    const unsubscribe = subscribeToOrders((firebaseOrders) => {
-      const validOrders = (firebaseOrders || []).filter(order => 
-        order != null && typeof order === 'object' && order.id != null
+    setOrdersLoading(true);
+
+    const handle = (incoming) => {
+      const valid = (incoming || []).filter(
+        (order) => order != null && typeof order === "object" && order.id != null
       );
-      setOrders(validOrders);
-      setLocalStorage(LOCAL_STORAGE_KEYS.ORDERS, validOrders);
+      valid.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+      setOrders(valid);
       setOrdersLoading(false);
-    });
+    };
+
+    const fail = () => {
+      setOrders([]);
+      setOrdersLoading(false);
+    };
+
+    const unsubscribe = isAdmin
+      ? subscribeToOrders(handle, fail)
+      : subscribeToUserOrders(user.uid, handle, fail);
 
     return () => unsubscribe();
-  }, []);
+  }, [user, isAdmin, authLoading]);
 
-  // ========== PRODUCTS CRUD ==========
-  const addProduct = useCallback((product) => {
-    const newProduct = { ...product, id: Date.now() };
-    setProducts((prev) => {
-      const updated = [...prev, newProduct];
-      syncProductsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
-      return updated;
-    });
-    toast.success("Product added successfully");
-    return newProduct;
-  }, []);
+  // ========== PRODUCTS ==========
+  const addProduct = useCallback(
+    (product) => {
+      const newProduct = { ...product, id: generateId(), createdAt: new Date().toISOString() };
+      commitProducts([...products, newProduct]);
+      toast.success("Product added successfully");
+      return newProduct;
+    },
+    [products, commitProducts]
+  );
 
-  const updateProduct = useCallback((id, updates) => {
-    const previousProduct = products.find((p) => p.id === id);
-    setProducts((prev) => {
-      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
-      syncProductsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
-      return updated;
-    });
-    toast.success("Product updated successfully");
+  const updateProduct = useCallback(
+    (id, updates) => {
+      const previous = products.find((p) => p.id === id);
+      commitProducts(products.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+      toast.success("Product updated successfully");
 
-    const wasOutOfStock = previousProduct && previousProduct.availability === false;
-    const isNowInStock = updates.availability === true;
-    if (wasOutOfStock && isNowInStock) {
-      getPendingStockNotifications(id).then((pending) => {
-        if (pending.length > 0) {
-          toast.success(
-            `${pending.length} customer${pending.length > 1 ? "s are" : " is"} waiting for this product — check "Notify Requests" to reach them.`,
-            { duration: 6000 }
-          );
-        }
-      });
-    }
-  }, [products]);
-
-  const deleteProduct = useCallback((id) => {
-    setProducts((prev) => {
-      const updated = prev.filter((p) => p.id !== id);
-      syncProductsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
-      return updated;
-    });
-    toast.success("Product deleted successfully");
-  }, []);
-
-  const duplicateProduct = useCallback((product) => {
-    const newProduct = { 
-      ...product, 
-      id: Date.now(), 
-      nameAr: `${product.nameAr} (نسخة)`,
-      nameEn: `${product.nameEn} (Copy)`,
-      sku: `${product.sku}-COPY`
-    };
-    setProducts((prev) => {
-      const updated = [...prev, newProduct];
-      syncProductsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
-      return updated;
-    });
-    toast.success("Product duplicated");
-    return newProduct;
-  }, []);
-
-  // ========== CATEGORIES CRUD ==========
-  const addCategory = useCallback((category) => {
-    const newCategory = { ...category, id: category.id || Date.now().toString() };
-    setCategories((prev) => {
-      const updated = [...prev, newCategory];
-      syncCategoriesToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.CATEGORIES, updated);
-      return updated;
-    });
-    toast.success("Category added");
-    return newCategory;
-  }, []);
-
-  const updateCategory = useCallback((id, updates) => {
-    setCategories((prev) => {
-      const updated = prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
-      syncCategoriesToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.CATEGORIES, updated);
-      return updated;
-    });
-    toast.success("Category updated");
-  }, []);
-
-  const deleteCategory = useCallback((id) => {
-    const productsInCategory = products.filter((p) => p.category === id);
-    if (productsInCategory.length > 0) {
-      toast.error(`Cannot delete: ${productsInCategory.length} products use this category`);
-      return false;
-    }
-    setCategories((prev) => {
-      const updated = prev.filter((c) => c.id !== id);
-      syncCategoriesToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.CATEGORIES, updated);
-      return updated;
-    });
-    toast.success("Category deleted");
-    return true;
-  }, [products]);
-
-  // ========== BRANDS CRUD ==========
-  const addBrand = useCallback((brand) => {
-    const newBrand = { ...brand, id: brand.id || Date.now().toString() };
-    setBrands((prev) => {
-      const updated = [...prev, newBrand];
-      syncBrandsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BRANDS, updated);
-      return updated;
-    });
-    toast.success("Brand added");
-    return newBrand;
-  }, []);
-
-  const updateBrand = useCallback((id, updates) => {
-    setBrands((prev) => {
-      const updated = prev.map((b) => (b.id === id ? { ...b, ...updates } : b));
-      syncBrandsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BRANDS, updated);
-      return updated;
-    });
-    toast.success("Brand updated");
-  }, []);
-
-  const deleteBrand = useCallback((id) => {
-    const productsWithBrand = products.filter((p) => p.brand === id);
-    if (productsWithBrand.length > 0) {
-      toast.error(`Cannot delete: ${productsWithBrand.length} products use this brand`);
-      return false;
-    }
-    setBrands((prev) => {
-      const updated = prev.filter((b) => b.id !== id);
-      syncBrandsToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BRANDS, updated);
-      return updated;
-    });
-    toast.success("Brand deleted");
-    return true;
-  }, [products]);
-
-  // ========== BANNERS CRUD ==========
-  const addBanner = useCallback((banner) => {
-    const newBanner = { ...banner, id: Date.now() };
-    setBanners((prev) => {
-      const updated = [...prev, newBanner];
-      syncBannersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BANNERS, updated);
-      return updated;
-    });
-    toast.success("Banner added");
-    return newBanner;
-  }, []);
-
-  const updateBanner = useCallback((id, updates) => {
-    setBanners((prev) => {
-      const updated = prev.map((b) => (b.id === id ? { ...b, ...updates } : b));
-      syncBannersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BANNERS, updated);
-      return updated;
-    });
-    toast.success("Banner updated");
-  }, []);
-
-  const deleteBanner = useCallback((id) => {
-    setBanners((prev) => {
-      const updated = prev.filter((b) => b.id !== id);
-      syncBannersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.BANNERS, updated);
-      return updated;
-    });
-    toast.success("Banner deleted");
-  }, []);
-
-  // ========== OFFERS CRUD ==========
-  const addOffer = useCallback((offer) => {
-    const newOffer = { ...offer, id: Date.now() };
-    setOffers((prev) => {
-      const updated = [...prev, newOffer];
-      syncOffersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.OFFERS, updated);
-      return updated;
-    });
-    toast.success("Offer created");
-    return newOffer;
-  }, []);
-
-  const updateOffer = useCallback((id, updates) => {
-    setOffers((prev) => {
-      const updated = prev.map((o) => (o.id === id ? { ...o, ...updates } : o));
-      syncOffersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.OFFERS, updated);
-      return updated;
-    });
-    toast.success("Offer updated");
-  }, []);
-
-  const deleteOffer = useCallback((id) => {
-    setOffers((prev) => {
-      const updated = prev.filter((o) => o.id !== id);
-      syncOffersToFirebase(updated);
-      setLocalStorage(LOCAL_STORAGE_KEYS.OFFERS, updated);
-      return updated;
-    });
-    toast.success("Offer deleted");
-  }, []);
-
-  // ========== TESTIMONIALS CRUD ==========
-  const addTestimonial = useCallback((testimonial) => {
-    const newTestimonial = { ...testimonial, id: Date.now() };
-    setTestimonials((prev) => {
-      const updated = [...prev, newTestimonial];
-      setLocalStorage(LOCAL_STORAGE_KEYS.TESTIMONIALS, updated);
-      return updated;
-    });
-    toast.success("Testimonial added");
-    return newTestimonial;
-  }, []);
-
-  const updateTestimonial = useCallback((id, updates) => {
-    setTestimonials((prev) => {
-      const updated = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
-      setLocalStorage(LOCAL_STORAGE_KEYS.TESTIMONIALS, updated);
-      return updated;
-    });
-    toast.success("Testimonial updated");
-  }, []);
-
-  const deleteTestimonial = useCallback((id) => {
-    setTestimonials((prev) => {
-      const updated = prev.filter((t) => t.id !== id);
-      setLocalStorage(LOCAL_STORAGE_KEYS.TESTIMONIALS, updated);
-      return updated;
-    });
-    toast.success("Testimonial deleted");
-  }, []);
-
-  // ========== ORDERS (FIREBASE) ==========
-  const updateOrderStatus = useCallback(async (orderId, status) => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-      toast.error("Order not found");
-      return;
-    }
-    if (!order.firebaseDocId) {
-      toast.error("Cannot update: Order not synced with cloud");
-      return;
-    }
-    try {
-      await updateOrderStatusInFirebase(order.firebaseDocId, status);
-      toast.success("Order status updated");
-    } catch (error) {
-      toast.error("Failed to update status");
-    }
-  }, [orders]);
-
-  const addOrder = useCallback(async (order) => {
-    if (!order || !order.id) {
-      toast.error("Invalid order data");
-      return;
-    }
-    try {
-      const result = await addOrderToFirebase(order);
-      const orderWithFirebaseId = { ...order, firebaseDocId: result.firebaseDocId };
-      const currentOrders = getLocalStorage(LOCAL_STORAGE_KEYS.ORDERS, []);
-      const updatedOrders = [orderWithFirebaseId, ...currentOrders];
-      setLocalStorage(LOCAL_STORAGE_KEYS.ORDERS, updatedOrders);
-      toast.success("Order placed successfully!");
-      return orderWithFirebaseId;
-    } catch (error) {
-      setOrders((prev) => {
-        const newOrders = [order, ...prev];
-        setLocalStorage(LOCAL_STORAGE_KEYS.ORDERS, newOrders);
-        return newOrders;
-      });
-      toast.success("Order saved locally (offline mode)");
-      return order;
-    }
-  }, []);
-
-  const deleteOrder = useCallback(async (orderId) => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-      toast.error("Order not found");
-      return;
-    }
-    if (!window.confirm("Are you sure you want to delete this order?")) return;
-    try {
-      if (order.firebaseDocId) {
-        await deleteOrderFromFirebase(order.firebaseDocId);
+      // Coming back into stock: surface anyone waiting on a "notify me".
+      if (previous?.availability === false && updates.availability === true) {
+        getPendingStockNotifications(id).then((pending) => {
+          if (pending.length > 0) {
+            toast.success(
+              `${pending.length} customer${pending.length > 1 ? "s are" : " is"} waiting for this product — check "Notify Requests" to reach them.`,
+              { duration: 6000 }
+            );
+          }
+        });
       }
-      toast.success("Order deleted");
-    } catch (error) {
-      toast.error("Failed to delete order");
-    }
-  }, [orders]);
+    },
+    [products, commitProducts]
+  );
 
-  // ========== STOCK NOTIFICATIONS ("Notify Me") ==========
+  const deleteProduct = useCallback(
+    (id) => {
+      commitProducts(products.filter((p) => p.id !== id));
+      toast.success("Product deleted successfully");
+    },
+    [products, commitProducts]
+  );
+
+  const duplicateProduct = useCallback(
+    (product) => {
+      const copy = {
+        ...product,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        nameAr: `${product.nameAr} (نسخة)`,
+        nameEn: `${product.nameEn} (Copy)`,
+        sku: `${product.sku}-COPY`,
+      };
+      commitProducts([...products, copy]);
+      toast.success("Product duplicated");
+      return copy;
+    },
+    [products, commitProducts]
+  );
+
+  // ========== CATEGORIES ==========
+  const addCategory = useCallback(
+    (category) => {
+      const newCategory = { ...category, id: category.id || generateId() };
+      commitCategories([...categories, newCategory]);
+      toast.success("Category added");
+      return newCategory;
+    },
+    [categories, commitCategories]
+  );
+
+  const updateCategory = useCallback(
+    (id, updates) => {
+      commitCategories(categories.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+      toast.success("Category updated");
+    },
+    [categories, commitCategories]
+  );
+
+  const deleteCategory = useCallback(
+    (id) => {
+      const inUse = products.filter((p) => p.category === id);
+      if (inUse.length > 0) {
+        toast.error(`Cannot delete: ${inUse.length} products use this category`);
+        return false;
+      }
+      commitCategories(categories.filter((c) => c.id !== id));
+      toast.success("Category deleted");
+      return true;
+    },
+    [products, categories, commitCategories]
+  );
+
+  // ========== BRANDS ==========
+  const addBrand = useCallback(
+    (brand) => {
+      const newBrand = { ...brand, id: brand.id || generateId() };
+      commitBrands([...brands, newBrand]);
+      toast.success("Brand added");
+      return newBrand;
+    },
+    [brands, commitBrands]
+  );
+
+  const updateBrand = useCallback(
+    (id, updates) => {
+      commitBrands(brands.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+      toast.success("Brand updated");
+    },
+    [brands, commitBrands]
+  );
+
+  const deleteBrand = useCallback(
+    (id) => {
+      // Products have historically stored the brand *name* rather than its id,
+      // and seed data has id === name. Match either so the guard actually fires.
+      const brand = brands.find((b) => b.id === id);
+      const inUse = products.filter((p) => p.brand === id || (brand && p.brand === brand.name));
+      if (inUse.length > 0) {
+        toast.error(`Cannot delete: ${inUse.length} products use this brand`);
+        return false;
+      }
+      commitBrands(brands.filter((b) => b.id !== id));
+      toast.success("Brand deleted");
+      return true;
+    },
+    [products, brands, commitBrands]
+  );
+
+  // ========== BANNERS ==========
+  const addBanner = useCallback(
+    (banner) => {
+      const newBanner = { ...banner, id: generateId() };
+      commitBanners([...banners, newBanner]);
+      toast.success("Banner added");
+      return newBanner;
+    },
+    [banners, commitBanners]
+  );
+
+  const updateBanner = useCallback(
+    (id, updates) => {
+      commitBanners(banners.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+      toast.success("Banner updated");
+    },
+    [banners, commitBanners]
+  );
+
+  const deleteBanner = useCallback(
+    (id) => {
+      commitBanners(banners.filter((b) => b.id !== id));
+      toast.success("Banner deleted");
+    },
+    [banners, commitBanners]
+  );
+
+  // ========== OFFERS ==========
+  const addOffer = useCallback(
+    (offer) => {
+      const newOffer = { ...offer, id: generateId() };
+      commitOffers([...offers, newOffer]);
+      toast.success("Offer created");
+      return newOffer;
+    },
+    [offers, commitOffers]
+  );
+
+  const updateOffer = useCallback(
+    (id, updates) => {
+      commitOffers(offers.map((o) => (o.id === id ? { ...o, ...updates } : o)));
+      toast.success("Offer updated");
+    },
+    [offers, commitOffers]
+  );
+
+  const deleteOffer = useCallback(
+    (id) => {
+      commitOffers(offers.filter((o) => o.id !== id));
+      toast.success("Offer deleted");
+    },
+    [offers, commitOffers]
+  );
+
+  // ========== TESTIMONIALS ==========
+  const addTestimonial = useCallback(
+    (testimonial) => {
+      const newTestimonial = { ...testimonial, id: generateId() };
+      commitTestimonials([...testimonials, newTestimonial]);
+      toast.success("Testimonial added");
+      return newTestimonial;
+    },
+    [testimonials, commitTestimonials]
+  );
+
+  const updateTestimonial = useCallback(
+    (id, updates) => {
+      commitTestimonials(testimonials.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      toast.success("Testimonial updated");
+    },
+    [testimonials, commitTestimonials]
+  );
+
+  const deleteTestimonial = useCallback(
+    (id) => {
+      commitTestimonials(testimonials.filter((t) => t.id !== id));
+      toast.success("Testimonial deleted");
+    },
+    [testimonials, commitTestimonials]
+  );
+
+  // ========== ORDER MUTATIONS ==========
+  const updateOrderStatus = useCallback(
+    async (orderId, status) => {
+      const order = orders.find((o) => o.id === orderId);
+      if (!order) {
+        toast.error("Order not found");
+        return;
+      }
+      if (!order.firebaseDocId) {
+        toast.error("Cannot update: order is not synced with the cloud");
+        return;
+      }
+      try {
+        await updateOrderStatusInFirebase(order.firebaseDocId, status);
+        toast.success("Order status updated");
+      } catch (error) {
+        console.error("Failed to update order status:", error);
+        toast.error("Failed to update status");
+      }
+    },
+    [orders]
+  );
+
+  /**
+   * Persist an order. Returns the stored order so checkout can reference it.
+   *
+   * The local `setOrders` matters: the Firebase snapshot can lag by a moment,
+   * and without it a customer briefly saw no order at all after paying.
+   */
+  const addOrder = useCallback(
+    async (order) => {
+      if (!order || !order.id) {
+        toast.error("Invalid order data");
+        return null;
+      }
+
+      const withOwner = { ...order, userId: user?.uid ?? null };
+
+      try {
+        const saved = await addOrderToFirebase(withOwner);
+        setOrders((prev) => [saved, ...prev.filter((o) => o.id !== saved.id)]);
+        return saved;
+      } catch (error) {
+        console.error("Failed to save order to Firebase:", error);
+        setOrders((prev) => [withOwner, ...prev]);
+        toast.error("Order saved on this device only — please contact us to confirm it");
+        return withOwner;
+      }
+    },
+    [user]
+  );
+
+  const deleteOrder = useCallback(
+    async (orderId) => {
+      const order = orders.find((o) => o.id === orderId);
+      if (!order) {
+        toast.error("Order not found");
+        return false;
+      }
+      // A local-only order has nothing to delete remotely; drop it from state
+      // rather than reporting a success that never happened.
+      if (!order.firebaseDocId) {
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+        toast.success("Local order removed");
+        return true;
+      }
+      try {
+        await deleteOrderFromFirebase(order.firebaseDocId);
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+        toast.success("Order deleted");
+        return true;
+      } catch (error) {
+        console.error("Failed to delete order:", error);
+        toast.error("Failed to delete order");
+        return false;
+      }
+    },
+    [orders]
+  );
+
+  // ========== STOCK NOTIFICATIONS ==========
   const requestStockNotification = useCallback(async (productId, contact) => {
     try {
       await addStockNotificationRequest(productId, contact);
       toast.success("We'll let you know as soon as it's back!");
       return true;
     } catch (error) {
-      toast.error("Something went wrong, please try again");
       console.error("Notification error:", error);
+      toast.error("Something went wrong, please try again");
       return false;
     }
   }, []);
 
-  const fetchStockAlerts = useCallback(async (productId) => {
-    return getPendingStockNotifications(productId);
-  }, []);
+  const fetchStockAlerts = useCallback((productId) => getPendingStockNotifications(productId), []);
 
-  const resolveStockAlerts = useCallback(async (docIds) => {
-    await markStockNotificationsSent(docIds);
-  }, []);
+  const resolveStockAlerts = useCallback((docIds) => markStockNotificationsSent(docIds), []);
 
   // ========== SETTINGS & HOMEPAGE ==========
-  const updateSettings = useCallback((updates) => {
-    setSettings((prev) => {
-      const updated = { ...prev, ...updates };
-      setLocalStorage(LOCAL_STORAGE_KEYS.SETTINGS, updated);
-      return updated;
-    });
-    toast.success("Settings saved");
-  }, []);
+  const updateSettings = useCallback(
+    (updates) => {
+      commitSettings({ ...settings, ...updates });
+      toast.success("Settings saved");
+    },
+    [settings, commitSettings]
+  );
 
-  const updateHomepage = useCallback((updates) => {
-    setHomepage((prev) => {
-      const updated = { ...prev, ...updates };
-      setLocalStorage(LOCAL_STORAGE_KEYS.HOMEPAGE, updated);
-      return updated;
-    });
-    toast.success("Homepage updated");
-  }, []);
+  const updateHomepage = useCallback(
+    (updates) => {
+      commitHomepage({ ...homepage, ...updates });
+      toast.success("Homepage updated");
+    },
+    [homepage, commitHomepage]
+  );
 
   // ========== STATS ==========
   const stats = useMemo(() => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const validOrders = (orders || []).filter(o => o != null && o.total != null);
+    const today = todayLocalISO();
+    const currentMonth = today.slice(0, 7);
+    const valid = (orders || []).filter((o) => o != null && o.total != null);
+    const counts = (o) => o.status !== "cancelled";
 
     return {
       totalProducts: products.length,
       totalCategories: categories.length,
       totalBrands: brands.length,
-      totalOrders: validOrders.length,
-      monthlyRevenue: validOrders
-        .filter((o) => {
-          const orderMonth = o.date?.substring(0, 7) || '';
-          return orderMonth === currentMonth && o.status !== "cancelled";
-        })
-        .reduce((sum, o) => sum + (o.total || 0), 0),
-      dailyRevenue: validOrders
-        .filter((o) => o.date === now.toISOString().split("T")[0] && o.status !== "cancelled")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+      totalOrders: valid.length,
+      monthlyRevenue: valid
+        .filter((o) => (o.date?.substring(0, 7) || "") === currentMonth && counts(o))
+        .reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+      dailyRevenue: valid
+        .filter((o) => o.date === today && counts(o))
+        .reduce((sum, o) => sum + (Number(o.total) || 0), 0),
       activeOffers: offers.filter((o) => o.active).length,
       outOfStock: products.filter((p) => !p.availability).length,
     };

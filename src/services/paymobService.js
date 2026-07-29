@@ -1,91 +1,72 @@
-// CHANGE THIS TO YOUR REAL DOMAIN WHEN DEPLOYED
-// Example: 'https://nomanyvapes.com/api'
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// Set VITE_API_BASE_URL to where the PHP endpoints live, e.g.
+// https://yourdomain.com/api
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
-export const initiateCardPayment = async (orderData) => {
-  // Validate amount before sending
-  const calculatedTotal = orderData.products.reduce((sum, item) => 
-    sum + ((item.price || 0) * (item.quantity || 1)), 0
-  );
-  
-  // Ensure total matches (client-side pre-check)
-  if (Math.abs(calculatedTotal - orderData.total) > 0.01) {
-    throw new Error('Price calculation mismatch. Please refresh and try again.');
+async function postJson(path, body) {
+  const response = await fetch(`${API_BASE}/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error || "Payment request failed");
   }
-  
-  const amountCents = Math.round(orderData.total * 100);
-  
-  const shippingData = {
-    apartment: "NA",
-    email: orderData.email || "customer@example.com",
-    floor: "NA",
-    first_name: orderData.firstName || orderData.customerName?.split(" ")[0] || "Customer",
-    street: orderData.address || "NA",
-    building: "NA",
-    phone_number: orderData.phone || "NA",
-    postal_code: "NA",
-    city: orderData.city || "NA",
-    country: "EG",
-    last_name: orderData.lastName || orderData.customerName?.split(" ").slice(1).join(" ") || "NA",
-    state: orderData.city || "NA",
-  };
+  return data;
+}
 
-  const items = orderData.products.map(item => ({
-    name: item.nameEn || item.nameAr || "Product",
-    amount_cents: Math.round((item.price || 0) * 100),
-    description: item.nameEn || item.nameAr || "Product",
-    quantity: item.quantity || 1,
+/**
+ * Open a payment session.
+ *
+ * Only product ids and quantities are sent — the server prices the cart from
+ * the live catalogue. Nothing the browser says about money is trusted, so a
+ * tampered request cannot change the amount charged.
+ */
+export const createPaymentSession = async ({ cartItems, customer, method }) => {
+  const items = cartItems.map((item) => ({
+    productId: String(item.id),
+    quantity: item.quantity,
   }));
 
-  const response = await fetch(`${API_BASE}/paymob.php`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      amount_cents: amountCents,
-      items,
-      shipping_data: shippingData,
-      billing_data: shippingData,
-      integration_id: orderData.integrationId,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to create payment');
-  }
-  
-  return await response.json();
+  return postJson("paymob.php", { items, customer, method });
 };
 
-export const initiateVodafoneCash = async (orderData, phoneNumber) => {
-  const cardResult = await initiateCardPayment({
-    ...orderData,
-    integrationId: orderData.vodafoneIntegrationId,
-  });
+/** Trigger the wallet push notification for an existing session. */
+export const payWithVodafone = async (merchantOrderId, phoneNumber) =>
+  postJson("vodafone.php", { merchantOrderId, phoneNumber });
 
-  const url = new URL(cardResult.iframeUrl);
-  const paymentToken = url.searchParams.get('payment_token');
-
-  const response = await fetch(`${API_BASE}/vodafone.php`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_token: paymentToken,
-      phone_number: phoneNumber,
-    }),
-  });
-
+/** Ask the server whether a payment actually cleared. */
+export const verifyPayment = async (merchantOrderId) => {
+  const response = await fetch(
+    `${API_BASE}/verify.php?merchantOrderId=${encodeURIComponent(merchantOrderId)}`
+  );
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Vodafone payment failed');
+    throw new Error("Could not check payment status");
   }
-  
-  const data = await response.json();
-  
-  return {
-    success: data.pending || data.success,
-    pending: data.pending,
-    redirectUrl: data.redirect_url,
-    paymobOrderId: cardResult.orderId,
-  };
+  return response.json();
+};
+
+/**
+ * Poll until the HMAC-verified callback lands, or we give up.
+ *
+ * Paymob's callback is server-to-server and usually arrives within a couple of
+ * seconds, but the customer's redirect can beat it — hence the wait rather than
+ * trusting the redirect itself.
+ */
+export const waitForPaymentConfirmation = async (
+  merchantOrderId,
+  { attempts = 10, intervalMs = 2000 } = {}
+) => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const result = await verifyPayment(merchantOrderId);
+      if (result.paid) return { paid: true, status: "paid" };
+      if (result.status === "failed") return { paid: false, status: "failed" };
+    } catch {
+      // Network blip — keep trying until the attempt budget runs out.
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return { paid: false, status: "timeout" };
 };

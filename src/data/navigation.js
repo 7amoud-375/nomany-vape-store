@@ -5,6 +5,7 @@ export const navigation = {
     { id: "categories", labelAr: "الأقسام", labelEn: "Categories", path: "/categories" },
     { id: "offers", labelAr: "العروض", labelEn: "Offers", path: "/offers" },
     { id: "about", labelAr: "من نحن", labelEn: "About", path: "/about" },
+    { id: "contact", labelAr: "اتصل بنا", labelEn: "Contact", path: "/contact" },
   ],
   dashboard: [
     { id: "overview", labelAr: "نظرة عامة", labelEn: "Overview", path: "/dashboard" },
@@ -16,6 +17,7 @@ export const navigation = {
     { id: "customers", labelAr: "العملاء", labelEn: "Customers", path: "/dashboard/customers" },
     { id: "analytics", labelAr: "التحليلات", labelEn: "Analytics", path: "/dashboard/analytics" },
     { id: "banners", labelAr: "البنرات", labelEn: "Banners", path: "/dashboard/banners" },
+    { id: "testimonials", labelAr: "آراء العملاء", labelEn: "Testimonials", path: "/dashboard/testimonials" },
     { id: "settings", labelAr: "الإعدادات", labelEn: "Settings", path: "/dashboard/settings" },
   ],
 };

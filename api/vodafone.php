@@ -1,72 +1,72 @@
 <?php
-$allowedOrigins = [
-    'https://yourdomain.com',      // <-- REPLACE WITH YOUR REAL DOMAIN
-    'https://www.yourdomain.com',  // <-- REPLACE WITH YOUR REAL DOMAIN
-    'http://localhost:5173',       // Vite dev server
-    'http://localhost:3000',       // React dev server
-];
+/**
+ * Charge a Vodafone Cash wallet for a session created by paymob.php.
+ *
+ * The client sends only its order reference and the wallet number -- the
+ * payment token is looked up server-side, so the amount cannot be altered.
+ * As with cards, the order is not "paid" until callback.php verifies the HMAC.
+ */
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (in_array($origin, $allowedOrigins)) {
-    header("Access-Control-Allow-Origin: $origin");
-} else {
-    header("Access-Control-Allow-Origin: https://yourdomain.com"); // fallback
+require_once __DIR__ . '/lib/bootstrap.php';
+
+api_cors();
+api_require_method('POST');
+api_rate_limit('vodafone', 10, 60);
+
+$input = api_body();
+
+$merchantOrderId = (string) ($input['merchantOrderId'] ?? '');
+$phone           = preg_replace('/\s+/', '', (string) ($input['phoneNumber'] ?? ''));
+
+if ($merchantOrderId === '') {
+    api_fail(400, 'Missing order reference');
 }
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Access-Control-Allow-Credentials: true');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
+// Egyptian mobile numbers: 01 followed by 0/1/2/5 and eight more digits.
+if (!preg_match('/^01[0125][0-9]{8}$/', $phone)) {
+    api_fail(400, 'Please enter a valid Egyptian mobile number');
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
+$record = api_payment_read($merchantOrderId);
+if (!$record || empty($record['payment_token'])) {
+    api_fail(404, 'Payment session not found, please start again');
+}
+if (($record['status'] ?? '') === 'paid') {
+    api_json(['success' => true, 'alreadyPaid' => true]);
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
-$paymob_base = 'https://accept.paymob.com/api';
+$ch = curl_init('https://accept.paymob.com/api/acceptance/payments/pay');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+    'source' => [
+        'identifier' => $phone,
+        'subtype'    => 'WALLET',
+    ],
+    'payment_token' => $record['payment_token'],
+]));
+curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
-try {
-    $ch = curl_init($paymob_base . '/acceptance/payments/pay');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-        'source' => [
-            'identifier' => $input['phone_number'],
-            'subtype' => 'WALLET'
-        ],
-        'payment_token' => $input['payment_token']
-    ]));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    if (curl_errno($ch)) {
-        throw new Exception('cURL error: ' . curl_error($ch));
-    }
-    
+$response = curl_exec($ch);
+if (curl_errno($ch)) {
+    $err = curl_error($ch);
     curl_close($ch);
-    
-    if ($httpCode >= 400) {
-        throw new Exception('Paymob API error: ' . $response);
-    }
-    
-    $data = json_decode($response, true);
-    echo json_encode($data);
-
-} catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'error' => $e->getMessage()
-    ]);
+    api_fail(502, 'Could not reach the payment provider, please try again', 'cURL error: ' . $err);
 }
-?>
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($code >= 400) {
+    api_fail(502, 'The wallet payment was declined, please try again', 'Paymob ' . $code . ': ' . $response);
+}
+
+$data = json_decode($response, true) ?: [];
+
+api_json([
+    'success'     => true,
+    'pending'     => !empty($data['pending']),
+    'redirectUrl' => $data['redirect_url'] ?? null,
+]);

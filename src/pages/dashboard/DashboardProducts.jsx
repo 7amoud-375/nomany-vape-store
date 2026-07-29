@@ -4,7 +4,7 @@ import { Plus, Pencil, Trash2, Copy, Eye, ImageIcon, Bell, Search } from "lucide
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice } from "../../utils";
+import { formatPrice, effectivePrice } from "../../utils";
 import DataTable from "../../components/dashboard/DataTable";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
@@ -41,7 +41,7 @@ const ProductForm = ({ formData, setFormData, language, t, brands, categories, h
         {language === "ar" ? "صورة المنتج" : "Product Image"}
       </label>
       <ImageUploader
-        value={formData.images[0]}
+        value={(formData.images || [])[0] || ""}
         onChange={(src) => setFormData((p) => ({ ...p, images: [src] }))}
         language={language}
       />
@@ -112,7 +112,7 @@ const ProductForm = ({ formData, setFormData, language, t, brands, categories, h
           className="input-field"
         >
           {brands.map((b) => (
-            <option key={b.id} value={b.name}>
+            <option key={b.id} value={b.id}>
               {b.name}
             </option>
           ))}
@@ -232,7 +232,7 @@ const DashboardProducts = () => {
     nameEn: "",
     descriptionAr: "",
     descriptionEn: "",
-    brand: brands[0]?.name || "",
+    brand: brands[0]?.id || "",
     category: categories[0]?.id || "",
     price: "",
     discountPrice: "",
@@ -340,14 +340,19 @@ const DashboardProducts = () => {
     {
       key: "brand",
       header: t("brand"),
-      render: (product) => <span>{product?.brand || "-"}</span>,
+      // Products store the brand id; resolve it to a display name the same way
+      // the category column does.
+      render: (product) => {
+        const brand = brands.find((b) => b.id === product?.brand);
+        return <span>{brand?.name || product?.brand || "-"}</span>;
+      },
     },
     {
       key: "price",
       header: t("price"),
       render: (product) => (
         <div>
-          {formatPrice(product?.discountPrice || product?.price || 0, language)}
+          {formatPrice(effectivePrice(product), language)}
           {product?.discountPrice && (
             <span className="text-xs text-gray-400 line-through ml-2">
               {formatPrice(product?.price, language)}

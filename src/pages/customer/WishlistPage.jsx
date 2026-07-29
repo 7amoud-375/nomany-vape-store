@@ -5,8 +5,10 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useCart } from "../../context/CartContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice } from "../../utils";
+import { formatPrice, effectivePrice, productImage } from "../../utils";
 import Button from "../../components/ui/Button";
+
+const PLACEHOLDER = "https://placehold.co/200x200/004741/FFFFFF?text=%20";
 
 const WishlistPage = () => {
   const { language } = useLanguage();
@@ -50,7 +52,7 @@ const WishlistPage = () => {
               <Link to={`/products/${item.id}`} className="block">
                 <div className="relative aspect-square overflow-hidden bg-gray-100 dark:bg-slate-700">
                   <img
-                    src={item.images[0]}
+                    src={productImage(item) || PLACEHOLDER}
                     alt={language === "ar" ? item.nameAr : item.nameEn}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     onError={(e) => {
@@ -65,7 +67,7 @@ const WishlistPage = () => {
                   {language === "ar" ? item.nameAr : item.nameEn}
                 </h3>
                 <p className="font-bold text-primary mb-4">
-                  {formatPrice(item.discountPrice || item.price, language)}
+                  {formatPrice(effectivePrice(item), language)}
                 </p>
 
                 <div className="flex gap-2">

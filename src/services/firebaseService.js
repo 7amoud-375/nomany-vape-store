@@ -2,7 +2,6 @@ import { db } from '../firebase';
 import {
   collection,
   addDoc,
-  getDocs,
   doc,
   updateDoc,
   deleteDoc,
@@ -10,6 +9,7 @@ import {
   query,
   where,
   orderBy,
+  getDocs,
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
@@ -18,224 +18,140 @@ const ordersRef = collection(db, 'orders');
 
 // ========== ORDERS ==========
 export const addOrderToFirebase = async (order) => {
-  try {
-    const orderWithTimestamp = {
-      ...order,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    const docRef = await addDoc(ordersRef, orderWithTimestamp);
-    return { firebaseDocId: docRef.id, ...orderWithTimestamp };
-  } catch (error) {
-    console.error('Firebase error adding order:', error);
-    throw error;
-  }
-};
-
-export const getOrdersFromFirebase = async () => {
-  try {
-    const q = query(ordersRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      firebaseDocId: doc.id,
-      ...doc.data(),
-      date: doc.data().date || new Date().toISOString().split('T')[0],
-      time: doc.data().time || new Date().toLocaleTimeString(),
-    }));
-  } catch (error) {
-    console.error('Error getting orders:', error);
-    throw error;
-  }
+  const docRef = await addDoc(ordersRef, {
+    ...order,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return { firebaseDocId: docRef.id, ...order };
 };
 
 export const updateOrderStatusInFirebase = async (firebaseDocId, status) => {
-  try {
-    const orderDoc = doc(db, 'orders', firebaseDocId);
-    await updateDoc(orderDoc, { status, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Error updating order status:', error);
-    throw error;
-  }
+  await updateDoc(doc(db, 'orders', firebaseDocId), {
+    status,
+    updatedAt: serverTimestamp(),
+  });
+  return true;
 };
 
 export const deleteOrderFromFirebase = async (firebaseDocId) => {
-  try {
-    const orderDoc = doc(db, 'orders', firebaseDocId);
-    await deleteDoc(orderDoc);
-    return true;
-  } catch (error) {
-    console.error('Error deleting order:', error);
-    throw error;
-  }
+  await deleteDoc(doc(db, 'orders', firebaseDocId));
+  return true;
 };
 
-export const subscribeToOrders = (callback) => {
+const mapOrder = (docSnap) => {
+  const data = docSnap.data();
+  return {
+    firebaseDocId: docSnap.id,
+    ...data,
+    date: data.date || new Date().toISOString().split('T')[0],
+    time: data.time || new Date().toLocaleTimeString(),
+  };
+};
+
+/** Every order. Admin only — firestore.rules rejects this for customers. */
+export const subscribeToOrders = (callback, onError) => {
   const q = query(ordersRef, orderBy('createdAt', 'desc'));
-  return onSnapshot(q, 
-    (snapshot) => {
-      const orders = snapshot.docs.map(doc => ({
-        firebaseDocId: doc.id,
-        ...doc.data(),
-        date: doc.data().date || new Date().toISOString().split('T')[0],
-        time: doc.data().time || new Date().toLocaleTimeString(),
-      }));
-      callback(orders);
-    },
+  return onSnapshot(
+    q,
+    (snapshot) => callback(snapshot.docs.map(mapOrder)),
     (error) => {
-      console.error('Firebase subscription error:', error);
+      console.error('Firebase orders subscription error:', error);
+      if (onError) onError(error);
     }
   );
 };
 
-// ========== STORE DATA (Products, Categories, etc.) ==========
-export const syncProductsToFirebase = async (products) => {
-  try {
-    await setDoc(doc(db, 'store', 'products'), { data: products, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Firebase error syncing products:', error);
-    throw error;
-  }
-};
-
-export const subscribeToProducts = (callback) => {
-  return onSnapshot(doc(db, 'store', 'products'), 
-    (docSnap) => {
-      if (docSnap.exists()) {
-        callback(docSnap.data().data || []);
-      } else {
-        callback([]);
-      }
-    },
+/**
+ * A single customer's own orders. Deliberately unsorted in the query so no
+ * composite index is required; the caller sorts.
+ */
+export const subscribeToUserOrders = (userId, callback, onError) => {
+  const q = query(ordersRef, where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => callback(snapshot.docs.map(mapOrder)),
     (error) => {
-      console.error('Firebase products subscription error:', error);
+      console.error('Firebase user orders subscription error:', error);
+      if (onError) onError(error);
     }
   );
 };
 
-export const syncCategoriesToFirebase = async (categories) => {
-  try {
-    await setDoc(doc(db, 'store', 'categories'), { data: categories, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Firebase error syncing categories:', error);
-    throw error;
-  }
+export const getOrdersFromFirebase = async () => {
+  const snapshot = await getDocs(query(ordersRef, orderBy('createdAt', 'desc')));
+  return snapshot.docs.map(mapOrder);
 };
 
-export const subscribeToCategories = (callback) => {
-  return onSnapshot(doc(db, 'store', 'categories'), 
-    (docSnap) => {
-      if (docSnap.exists()) {
-        callback(docSnap.data().data || []);
-      } else {
-        callback([]);
-      }
-    },
-    (error) => {
-      console.error('Firebase categories subscription error:', error);
-    }
+// ========== STORE DATA (products, categories, brands, offers, banners, ...) ==========
+//
+// Each collection is one document under `store/`. Writes are admin-only per
+// firestore.rules; reads are public so the shop works signed-out.
+
+const syncStoreDoc = async (name, data) => {
+  await setDoc(doc(db, 'store', name), { data, updatedAt: serverTimestamp() });
+  return true;
+};
+
+/**
+ * Subscribe to one store document.
+ *
+ * Passes `null` when the document does not exist yet (so the caller can keep
+ * its seed data) and the real value when it does — including an empty array.
+ * Collapsing those two cases is what previously made "delete the last product"
+ * invisible to every other browser.
+ */
+const subscribeToStoreDoc = (name, callback) =>
+  onSnapshot(
+    doc(db, 'store', name),
+    (docSnap) => callback(docSnap.exists() ? docSnap.data().data ?? null : null),
+    (error) => console.error(`Firebase ${name} subscription error:`, error)
   );
-};
 
-export const syncBrandsToFirebase = async (brands) => {
-  try {
-    await setDoc(doc(db, 'store', 'brands'), { data: brands, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Firebase error syncing brands:', error);
-    throw error;
-  }
-};
+export const syncProductsToFirebase = (products) => syncStoreDoc('products', products);
+export const subscribeToProducts = (cb) => subscribeToStoreDoc('products', cb);
 
-export const subscribeToBrands = (callback) => {
-  return onSnapshot(doc(db, 'store', 'brands'), 
-    (docSnap) => {
-      if (docSnap.exists()) {
-        callback(docSnap.data().data || []);
-      } else {
-        callback([]);
-      }
-    },
-    (error) => {
-      console.error('Firebase brands subscription error:', error);
-    }
-  );
-};
+export const syncCategoriesToFirebase = (categories) => syncStoreDoc('categories', categories);
+export const subscribeToCategories = (cb) => subscribeToStoreDoc('categories', cb);
 
-export const syncOffersToFirebase = async (offers) => {
-  try {
-    await setDoc(doc(db, 'store', 'offers'), { data: offers, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Firebase error syncing offers:', error);
-    throw error;
-  }
-};
+export const syncBrandsToFirebase = (brands) => syncStoreDoc('brands', brands);
+export const subscribeToBrands = (cb) => subscribeToStoreDoc('brands', cb);
 
-export const subscribeToOffers = (callback) => {
-  return onSnapshot(doc(db, 'store', 'offers'), 
-    (docSnap) => {
-      if (docSnap.exists()) {
-        callback(docSnap.data().data || []);
-      } else {
-        callback([]);
-      }
-    },
-    (error) => {
-      console.error('Firebase offers subscription error:', error);
-    }
-  );
-};
+export const syncOffersToFirebase = (offers) => syncStoreDoc('offers', offers);
+export const subscribeToOffers = (cb) => subscribeToStoreDoc('offers', cb);
 
-export const syncBannersToFirebase = async (banners) => {
-  try {
-    await setDoc(doc(db, 'store', 'banners'), { data: banners, updatedAt: serverTimestamp() });
-    return true;
-  } catch (error) {
-    console.error('Firebase error syncing banners:', error);
-    throw error;
-  }
-};
+export const syncBannersToFirebase = (banners) => syncStoreDoc('banners', banners);
+export const subscribeToBanners = (cb) => subscribeToStoreDoc('banners', cb);
 
-export const subscribeToBanners = (callback) => {
-  return onSnapshot(doc(db, 'store', 'banners'), 
-    (docSnap) => {
-      if (docSnap.exists()) {
-        callback(docSnap.data().data || []);
-      } else {
-        callback([]);
-      }
-    },
-    (error) => {
-      console.error('Firebase banners subscription error:', error);
-    }
-  );
-};
+// These three used to live only in the admin's own localStorage, so changes
+// never reached a single customer — including shippingCost, which the payment
+// server now reads from store/settings.
+export const syncTestimonialsToFirebase = (testimonials) => syncStoreDoc('testimonials', testimonials);
+export const subscribeToTestimonials = (cb) => subscribeToStoreDoc('testimonials', cb);
+
+export const syncSettingsToFirebase = (settings) => syncStoreDoc('settings', settings);
+export const subscribeToSettings = (cb) => subscribeToStoreDoc('settings', cb);
+
+export const syncHomepageToFirebase = (homepage) => syncStoreDoc('homepage', homepage);
+export const subscribeToHomepage = (cb) => subscribeToStoreDoc('homepage', cb);
 
 // ========== STOCK NOTIFICATIONS ("Notify Me") ==========
 const stockNotificationsRef = collection(db, 'stockNotifications');
 
 export const addStockNotificationRequest = async (productId, contact) => {
-  try {
-    await addDoc(stockNotificationsRef, {
-      productId: String(productId),
-      contact,
-      notified: false,
-      createdAt: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error('Firebase error adding stock notification request:', error);
-    throw error;
-  }
+  await addDoc(stockNotificationsRef, {
+    productId: String(productId),
+    contact,
+    notified: false,
+    createdAt: serverTimestamp(),
+  });
 };
 
 export const getPendingStockNotifications = async (productId) => {
   try {
     const q = query(
-      stockNotificationsRef, 
-      where('productId', '==', String(productId)), 
+      stockNotificationsRef,
+      where('productId', '==', String(productId)),
       where('notified', '==', false)
     );
     const snapshot = await getDocs(q);
@@ -247,25 +163,16 @@ export const getPendingStockNotifications = async (productId) => {
 };
 
 export const markStockNotificationsSent = async (docIds) => {
-  try {
-    await Promise.all(
-      docIds.map((id) => updateDoc(doc(db, 'stockNotifications', id), { notified: true }))
-    );
-  } catch (error) {
-    console.error('Firebase error marking stock notifications as sent:', error);
-    throw error;
-  }
+  await Promise.all(
+    docIds.map((id) => updateDoc(doc(db, 'stockNotifications', id), { notified: true }))
+  );
 };
 
 export const subscribeToStockNotifications = (callback) => {
   const q = query(stockNotificationsRef, where('notified', '==', false));
-  return onSnapshot(q, 
-    (snapshot) => {
-      const requests = snapshot.docs.map(doc => ({ firebaseDocId: doc.id, ...doc.data() }));
-      callback(requests);
-    },
-    (error) => {
-      console.error('Firebase stock notifications subscription error:', error);
-    }
+  return onSnapshot(
+    q,
+    (snapshot) => callback(snapshot.docs.map((d) => ({ firebaseDocId: d.id, ...d.data() }))),
+    (error) => console.error('Firebase stock notifications subscription error:', error)
   );
 };

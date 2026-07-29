@@ -1,44 +1,86 @@
+/**
+ * Coerce a value that may be a string to a number.
+ *
+ * The dashboard's number inputs hand back strings ("450"), which silently turn
+ * comparisons into lexicographic ones — "90" >= "450" is true. Everything that
+ * does arithmetic or comparison on money or ratings goes through here.
+ */
+export const toNumber = (value, fallback = 0) => {
+  const n = typeof value === "number" ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/** The effective selling price: discount when it is real and lower. */
+export const effectivePrice = (product) => {
+  if (!product) return 0;
+  const price = toNumber(product.price);
+  const discount = toNumber(product.discountPrice);
+  return discount > 0 && discount < price ? discount : price;
+};
+
 export const formatPrice = (price, locale = "ar") => {
   const currency = locale === "ar" ? "ج.م" : "EGP";
-  return `${price.toLocaleString(locale === "ar" ? "ar-EG" : "en-US")} ${currency}`;
+  const amount = toNumber(price);
+  return `${amount.toLocaleString(locale === "ar" ? "ar-EG" : "en-US")} ${currency}`;
 };
 
 export const formatDate = (dateString, locale = "ar") => {
-  const options = { year: "numeric", month: "long", day: "numeric" };
-  return new Date(dateString).toLocaleDateString(
-    locale === "ar" ? "ar-EG" : "en-US",
-    options
-  );
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+/**
+ * Today's date as YYYY-MM-DD in the *local* timezone.
+ *
+ * toISOString() is UTC, so in Egypt (UTC+2/+3) it rolls over hours early and
+ * put revenue on the wrong day.
+ */
+export const todayLocalISO = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export const calculateDiscount = (price, discountPrice) => {
-  if (!discountPrice || discountPrice >= price) return 0;
-  return Math.round(((price - discountPrice) / price) * 100);
+  const base = toNumber(price);
+  const discounted = toNumber(discountPrice);
+  if (!discounted || base <= 0 || discounted >= base) return 0;
+  return Math.round(((base - discounted) / base) * 100);
 };
 
+/** Collision-resistant id. Date.now() repeats when two records are made fast. */
 export const generateId = () => {
-  return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 9);
+  return `${Date.now().toString(36)}${random}`;
 };
 
+/**
+ * URL-safe slug that keeps Arabic letters.
+ *
+ * The old pattern stripped every non-ASCII word character, so any Arabic name
+ * slugged to an empty string and every Arabic product collided on "".
+ */
 export const slugify = (text) => {
-  return text
-    .toString()
-    .toLowerCase()
+  return String(text ?? "")
     .trim()
+    .toLowerCase()
     .replace(/\s+/g, "-")
-    .replace(/[^\w\-]+/g, "")
-    .replace(/\-\-+/g, "-");
+    .replace(/[^\p{L}\p{N}-]+/gu, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
 };
 
 export const debounce = (func, wait) => {
   let timeout;
   return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
     clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
 };
 
@@ -87,11 +129,11 @@ export const filterProducts = (products, filters) => {
   }
 
   if (filters.minPrice !== undefined) {
-    result = result.filter((p) => (p.discountPrice || p.price) >= filters.minPrice);
+    result = result.filter((p) => effectivePrice(p) >= toNumber(filters.minPrice));
   }
 
   if (filters.maxPrice !== undefined) {
-    result = result.filter((p) => (p.discountPrice || p.price) <= filters.maxPrice);
+    result = result.filter((p) => effectivePrice(p) <= toNumber(filters.maxPrice));
   }
 
   if (filters.offer) {
@@ -99,10 +141,19 @@ export const filterProducts = (products, filters) => {
   }
 
   if (filters.rating) {
-    result = result.filter((p) => p.rating >= filters.rating);
+    result = result.filter((p) => toNumber(p.rating) >= toNumber(filters.rating));
   }
 
   return result;
+};
+
+/** Newest-first ordering, falling back to id when a record predates createdAt. */
+const createdOrder = (product) => {
+  if (product.createdAt) {
+    const time = new Date(product.createdAt).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+  return toNumber(product.id, 0);
 };
 
 export const sortProducts = (products, sortBy) => {
@@ -110,38 +161,52 @@ export const sortProducts = (products, sortBy) => {
 
   switch (sortBy) {
     case "newest":
-      return sorted.sort((a, b) => b.id - a.id);
+      return sorted.sort((a, b) => createdOrder(b) - createdOrder(a));
     case "oldest":
-      return sorted.sort((a, b) => a.id - b.id);
+      return sorted.sort((a, b) => createdOrder(a) - createdOrder(b));
     case "price-low":
-      return sorted.sort((a, b) => (a.discountPrice || a.price) - (b.discountPrice || b.price));
+      return sorted.sort((a, b) => effectivePrice(a) - effectivePrice(b));
     case "price-high":
-      return sorted.sort((a, b) => (b.discountPrice || b.price) - (a.discountPrice || a.price));
+      return sorted.sort((a, b) => effectivePrice(b) - effectivePrice(a));
     case "best-selling":
-      return sorted.sort((a, b) => b.reviewsCount - a.reviewsCount);
+      return sorted.sort((a, b) => toNumber(b.reviewsCount) - toNumber(a.reviewsCount));
     case "highest-rated":
-      return sorted.sort((a, b) => b.rating - a.rating);
+      return sorted.sort((a, b) => toNumber(b.rating) - toNumber(a.rating));
     case "alphabetical":
-      return sorted.sort((a, b) => a.nameEn.localeCompare(b.nameEn));
+      return sorted.sort((a, b) => String(a.nameEn ?? "").localeCompare(String(b.nameEn ?? "")));
     default:
       return sorted;
   }
 };
 
+/**
+ * Search across names, descriptions, brand, category and tags.
+ *
+ * Every field is coerced before use: a product saved without a description or
+ * tags used to throw on `.toLowerCase()` and take the whole page down.
+ */
 export const searchProducts = (products, query, locale = "ar") => {
-  if (!query.trim()) return products;
+  if (!query || !query.trim()) return products;
 
-  const lowerQuery = query.toLowerCase().trim();
+  const needle = query.toLowerCase().trim();
+  const has = (value) => String(value ?? "").toLowerCase().includes(needle);
 
   return products.filter((p) => {
-    const name = locale === "ar" ? p.nameAr : p.nameEn;
-    const desc = locale === "ar" ? p.descriptionAr : p.descriptionEn;
+    if (!p) return false;
     return (
-      name.toLowerCase().includes(lowerQuery) ||
-      desc.toLowerCase().includes(lowerQuery) ||
-      p.brand.toLowerCase().includes(lowerQuery) ||
-      p.category.toLowerCase().includes(lowerQuery) ||
-      p.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+      has(locale === "ar" ? p.nameAr : p.nameEn) ||
+      has(locale === "ar" ? p.descriptionAr : p.descriptionEn) ||
+      has(p.brand) ||
+      has(p.category) ||
+      has(p.sku) ||
+      (Array.isArray(p.tags) && p.tags.some((tag) => has(tag)))
     );
   });
+};
+
+/** First usable image, or null so callers can render their own placeholder. */
+export const productImage = (product) => {
+  const images = product?.images;
+  if (!Array.isArray(images)) return null;
+  return images.find((src) => typeof src === "string" && src.trim() !== "") ?? null;
 };

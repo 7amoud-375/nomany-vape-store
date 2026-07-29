@@ -1,33 +1,17 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect } from "react";
+import { X, Loader2 } from "lucide-react";
 
-const PaymobIframe = ({ url, onClose, onSuccess, onFailure }) => {
-  const iframeRef = useRef(null);
+/**
+ * Hosts the Paymob payment iframe.
+ *
+ * This component intentionally does NOT decide whether payment succeeded. It
+ * previously listened for a `postMessage` of type `payment_success` that Paymob
+ * does not send, so successful payments left the customer staring at the frame.
+ * CheckoutPage now polls the server, which knows the HMAC-verified truth.
+ */
+const PaymobIframe = ({ url, onClose }) => {
+  const isRtl = document.documentElement.dir === "rtl";
 
-  useEffect(() => {
-    // Listen for postMessage from iframe
-    const handleMessage = (event) => {
-      // Verify origin
-      if (event.origin !== "https://accept.paymob.com") return;
-      
-      const { data } = event;
-      if (data.type === "payment_success") {
-        onSuccess(data);
-      } else if (data.type === "payment_failure") {
-        onFailure(data);
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [onSuccess, onFailure]);
-
-  // Handle iframe load events
-  const handleLoad = () => {
-    console.log("Paymob iframe loaded");
-  };
-
-  // Handle close with escape key
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") onClose();
@@ -35,6 +19,15 @@ const PaymobIframe = ({ url, onClose, onSuccess, onFailure }) => {
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [onClose]);
+
+  // Stop the page behind the modal from scrolling.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -48,36 +41,37 @@ const PaymobIframe = ({ url, onClose, onSuccess, onFailure }) => {
             </div>
             <div>
               <h3 className="font-bold text-gray-900 dark:text-white text-sm">
-                {document.documentElement.dir === "rtl" ? "دفع آمن" : "Secure Payment"}
+                {isRtl ? "دفع آمن" : "Secure Payment"}
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {document.documentElement.dir === "rtl" ? "بياناتك مشفرة بالكامل" : "Your data is fully encrypted"}
+                {isRtl ? "بياناتك مشفرة بالكامل" : "Your data is fully encrypted"}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-            title="Close"
+            title={isRtl ? "إغلاق" : "Close"}
           >
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
+
         <div className="flex-1 relative">
           <iframe
-            ref={iframeRef}
             src={url}
             className="w-full h-full border-0"
             title="Paymob Payment"
             allow="payment"
-            onLoad={handleLoad}
           />
         </div>
+
         <div className="p-3 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {document.documentElement.dir === "rtl" 
-              ? "🔒 مدعوم من Paymob - بوابة دفع مصرية مرخصة" 
-              : "🔒 Powered by Paymob - Licensed Egyptian Payment Gateway"}
+          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {isRtl
+              ? "🔒 مدعوم من Paymob — سيتم تأكيد طلبك تلقائياً بعد الدفع"
+              : "🔒 Powered by Paymob — your order confirms automatically once paid"}
           </p>
         </div>
       </div>

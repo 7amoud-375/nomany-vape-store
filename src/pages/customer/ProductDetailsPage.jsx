@@ -8,7 +8,7 @@ import { useWishlist } from "../../context/WishlistContext";
 import { useProducts } from "../../hooks/useProducts";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, calculateDiscount } from "../../utils";
+import { formatPrice, calculateDiscount, effectivePrice, productImage } from "../../utils";
 import ProductGrid from "../../components/product/ProductGrid";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
@@ -44,7 +44,7 @@ const ProductDetailsPage = () => {
 
   const name = language === "ar" ? product.nameAr : product.nameEn;
   const description = language === "ar" ? product.descriptionAr : product.descriptionEn;
-  const price = product.discountPrice || product.price;
+  const price = effectivePrice(product);
   const discount = calculateDiscount(product.price, product.discountPrice);
   const related = getRelatedProducts(product.id, product.category);
   const inWishlist = isInWishlist(product.id);
@@ -93,7 +93,7 @@ const ProductDetailsPage = () => {
           >
             <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 dark:bg-slate-700 mb-4">
               <img
-                src={product.images[selectedImage] || product.images[0]}
+                src={(product.images || [])[selectedImage] || productImage(product) || "https://placehold.co/600x600/004741/FFFFFF?text=%20"}
                 alt={name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -101,9 +101,9 @@ const ProductDetailsPage = () => {
                 }}
               />
             </div>
-            {product.images.length > 1 && (
+            {(product.images || []).length > 1 && (
               <div className="flex gap-3">
-                {product.images.map((img, i) => (
+                {(product.images || []).map((img, i) => (
                   <button
                     key={i}
                     onClick={() => setSelectedImage(i)}

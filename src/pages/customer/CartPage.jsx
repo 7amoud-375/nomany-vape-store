@@ -5,8 +5,11 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useData } from "../../context/DataContext"; // ADDED: Import useData
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice } from "../../utils";
+import { formatPrice, toNumber, productImage, effectivePrice } from "../../utils";
 import Button from "../../components/ui/Button";
+import toast from "react-hot-toast";
+
+const PLACEHOLDER = "https://placehold.co/100x100/004741/FFFFFF?text=%20";
 
 const CartPage = () => {
   const { language } = useLanguage();
@@ -16,8 +19,13 @@ const CartPage = () => {
   const isRtl = language === "ar";
 
   // CHANGED: Calculate dynamic shipping cost from settings
-  const shippingCost = cartItems.length > 0 ? Number(settings?.shippingCost || 0) : 0;
+  const shippingCost = cartItems.length > 0 ? toNumber(settings?.shippingCost) : 0;
   const finalTotal = cartTotal + shippingCost;
+
+  const handleClearCart = () => {
+    clearCart();
+    toast.success(isRtl ? "تم إفراغ السلة" : "Cart cleared");
+  };
 
   if (cartItems.length === 0) {
     return (
@@ -52,7 +60,7 @@ const CartPage = () => {
               >
                 <div className="w-24 h-24 rounded-xl overflow-hidden bg-gray-100 dark:bg-slate-700 flex-shrink-0">
                   <img
-                    src={item.images[0]}
+                    src={productImage(item) || PLACEHOLDER}
                     alt={isRtl ? item.nameAr : item.nameEn}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -67,7 +75,7 @@ const CartPage = () => {
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{item.brand}</p>
                   <p className="font-bold text-primary">
-                    {formatPrice(item.discountPrice || item.price, language)}
+                    {formatPrice(effectivePrice(item), language)}
                   </p>
                 </div>
 
@@ -99,7 +107,7 @@ const CartPage = () => {
             ))}
 
             <button
-              onClick={clearCart}
+              onClick={handleClearCart}
               className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1"
             >
               <Trash2 className="w-4 h-4" />

@@ -1,43 +1,51 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useLanguage } from "./context/LanguageContext";
-import { AuthProvider } from "./context/AuthContext";
 import CustomerLayout from "./layouts/CustomerLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
-
-// Customer Pages
 import HomePage from "./pages/customer/HomePage";
-import ProductsPage from "./pages/customer/ProductsPage";
-import ProductDetailsPage from "./pages/customer/ProductDetailsPage";
-import CategoriesPage from "./pages/customer/CategoriesPage";
-import CategoryPage from "./pages/customer/CategoryPage";
-import OffersPage from "./pages/customer/OffersPage";
-import AboutPage from "./pages/customer/AboutPage";
-import AuthPage from "./pages/customer/AuthPage"; // New Auth Page
-import ProfilePage from "./pages/customer/ProfilePage"; // New Profile Page
-import CartPage from "./pages/customer/CartPage";
-import CheckoutPage from "./pages/customer/CheckoutPage";
-import WishlistPage from "./pages/customer/WishlistPage";
-import SearchPage from "./pages/customer/SearchPage";
-import NotFoundPage from "./pages/customer/NotFoundPage";
 
-// Dashboard Pages
-import DashboardOverview from "./pages/dashboard/DashboardOverview";
-import DashboardProducts from "./pages/dashboard/DashboardProducts";
-import DashboardCategories from "./pages/dashboard/DashboardCategories";
-import DashboardBrands from "./pages/dashboard/DashboardBrands";
-import DashboardOffers from "./pages/dashboard/DashboardOffers";
-import DashboardOrders from "./pages/dashboard/DashboardOrders";
-import DashboardCustomers from "./pages/dashboard/DashboardCustomers";
-import DashboardAnalytics from "./pages/dashboard/DashboardAnalytics";
-import DashboardBanners from "./pages/dashboard/DashboardBanners";
-import DashboardSettings from "./pages/dashboard/DashboardSettings";
+// Everything except the landing page is code-split: the dashboard alone was
+// roughly half the bundle and no customer ever loads it.
+const ProductsPage = lazy(() => import("./pages/customer/ProductsPage"));
+const ProductDetailsPage = lazy(() => import("./pages/customer/ProductDetailsPage"));
+const CategoriesPage = lazy(() => import("./pages/customer/CategoriesPage"));
+const CategoryPage = lazy(() => import("./pages/customer/CategoryPage"));
+const OffersPage = lazy(() => import("./pages/customer/OffersPage"));
+const AboutPage = lazy(() => import("./pages/customer/AboutPage"));
+const ContactPage = lazy(() => import("./pages/customer/ContactPage"));
+const AuthPage = lazy(() => import("./pages/customer/AuthPage"));
+const ProfilePage = lazy(() => import("./pages/customer/ProfilePage"));
+const CartPage = lazy(() => import("./pages/customer/CartPage"));
+const CheckoutPage = lazy(() => import("./pages/customer/CheckoutPage"));
+const WishlistPage = lazy(() => import("./pages/customer/WishlistPage"));
+const SearchPage = lazy(() => import("./pages/customer/SearchPage"));
+const NotFoundPage = lazy(() => import("./pages/customer/NotFoundPage"));
+
+const DashboardOverview = lazy(() => import("./pages/dashboard/DashboardOverview"));
+const DashboardProducts = lazy(() => import("./pages/dashboard/DashboardProducts"));
+const DashboardCategories = lazy(() => import("./pages/dashboard/DashboardCategories"));
+const DashboardBrands = lazy(() => import("./pages/dashboard/DashboardBrands"));
+const DashboardOffers = lazy(() => import("./pages/dashboard/DashboardOffers"));
+const DashboardOrders = lazy(() => import("./pages/dashboard/DashboardOrders"));
+const DashboardCustomers = lazy(() => import("./pages/dashboard/DashboardCustomers"));
+const DashboardAnalytics = lazy(() => import("./pages/dashboard/DashboardAnalytics"));
+const DashboardBanners = lazy(() => import("./pages/dashboard/DashboardBanners"));
+const DashboardTestimonials = lazy(() => import("./pages/dashboard/DashboardTestimonials"));
+const DashboardSettings = lazy(() => import("./pages/dashboard/DashboardSettings"));
+
+const RouteFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+  </div>
+);
 
 function App() {
   const { dir } = useLanguage();
 
   return (
-    <AuthProvider>
-      <div dir={dir} className="min-h-screen bg-secondary-light dark:bg-slate-950 transition-colors duration-300">
+    <div dir={dir} className="min-h-screen bg-secondary-light dark:bg-slate-950 transition-colors duration-300">
+      <Suspense fallback={<RouteFallback />}>
         <Routes>
           {/* Customer Routes */}
           <Route element={<CustomerLayout />}>
@@ -48,17 +56,19 @@ function App() {
             <Route path="/categories/:id" element={<CategoryPage />} />
             <Route path="/offers" element={<OffersPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/profile" element={<ProfilePage />} /> {/* New Route */}
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
           {/* Auth Route */}
           <Route path="/login" element={<AuthPage />} />
 
-          {/* Dashboard Routes (protected for Admin only) */}
+          {/* Dashboard Routes — DashboardLayout enforces the admin check, and
+              firestore.rules enforces it again server-side. */}
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardOverview />} />
             <Route path="products" element={<DashboardProducts />} />
@@ -69,14 +79,15 @@ function App() {
             <Route path="customers" element={<DashboardCustomers />} />
             <Route path="analytics" element={<DashboardAnalytics />} />
             <Route path="banners" element={<DashboardBanners />} />
+            <Route path="testimonials" element={<DashboardTestimonials />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>
 
           {/* 404 */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
-      </div>
-    </AuthProvider>
+      </Suspense>
+    </div>
   );
 }
 

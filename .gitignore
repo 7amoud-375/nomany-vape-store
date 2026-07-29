@@ -3,6 +3,15 @@
 .env.local
 .env.*.local
 
+# Server-side payment records, rate-limit counters, cached OAuth tokens.
+# Never commit these — they describe real transactions.
+api/data/*
+!api/data/.htaccess
+
+# Firebase service-account keys
+*-service-account*.json
+serviceAccountKey.json
+
 # Dependencies
 node_modules/
 .pnp

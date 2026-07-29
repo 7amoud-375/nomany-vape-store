@@ -6,9 +6,11 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, calculateDiscount } from "../../utils";
+import { formatPrice, calculateDiscount, effectivePrice, productImage } from "../../utils";
 import Badge from "../ui/Badge";
 import Modal from "../ui/Modal";
+
+const PLACEHOLDER = "https://placehold.co/400x400/004741/FFFFFF?text=Nomany";
 
 const ProductCard = ({ product, index = 0 }) => {
   const { language } = useLanguage();
@@ -19,9 +21,10 @@ const ProductCard = ({ product, index = 0 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const name = language === "ar" ? product.nameAr : product.nameEn;
-  const price = product.discountPrice || product.price;
+  const price = effectivePrice(product);
   const discount = calculateDiscount(product.price, product.discountPrice);
   const inWishlist = isInWishlist(product.id);
+  const image = productImage(product) || PLACEHOLDER;
 
   const handleAddToCart = (e) => {
     e.preventDefault();
@@ -57,7 +60,7 @@ const ProductCard = ({ product, index = 0 }) => {
                 <div className="absolute inset-0 skeleton" />
               )}
               <img
-                src={product.images[0]}
+                src={image}
                 alt={name}
                 className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${
                   imageLoaded ? "opacity-100" : "opacity-0"
@@ -140,7 +143,7 @@ const ProductCard = ({ product, index = 0 }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-slate-700">
             <img
-              src={product.images[0]}
+              src={image}
               alt={name}
               className="w-full h-full object-cover"
               onError={(e) => {

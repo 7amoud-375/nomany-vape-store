@@ -38,6 +38,8 @@ export const ORDER_STATUS = {
 };
 
 export const ORDER_STATUS_COLORS = {
+  awaiting_payment: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  paid: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
   pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
   confirmed: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   preparing: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
@@ -52,15 +54,19 @@ export const PAYMENT_METHODS = [
   { id: "vodafone", labelAr: "فودافون كاش", labelEn: "Vodafone Cash", icon: "wallet" },
 ];
 
-export const PAYMOB_CONFIG = {
-  IFRAME_ID: import.meta.env.VITE_PAYMOB_IFRAME_ID,
-  BASE_URL: "https://accept.paymob.com/api",
+export const ORDER_STATUS_LABELS = {
+  awaiting_payment: { ar: "بانتظار الدفع", en: "Awaiting payment" },
+  pending: { ar: "قيد الانتظار", en: "Pending" },
+  paid: { ar: "مدفوع", en: "Paid" },
+  confirmed: { ar: "مؤكد", en: "Confirmed" },
+  preparing: { ar: "قيد التجهيز", en: "Preparing" },
+  shipped: { ar: "تم الشحن", en: "Shipped" },
+  delivered: { ar: "تم التوصيل", en: "Delivered" },
+  cancelled: { ar: "ملغي", en: "Cancelled" },
 };
 
-export const INTEGRATION_IDS = {
-  CARD: parseInt(import.meta.env.VITE_PAYMOB_INTEGRATION_ID_CARD) || 0,
-  VODAFONE: parseInt(import.meta.env.VITE_PAYMOB_INTEGRATION_ID_VODAFONE) || 0,
-};
+// Paymob iframe and integration ids now live in api/.env and are chosen
+// server-side. Nothing about payment routing belongs in the client bundle.
 
 export const BREAKPOINTS = {
   sm: 640,

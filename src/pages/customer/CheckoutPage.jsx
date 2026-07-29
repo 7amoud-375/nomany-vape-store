@@ -1,18 +1,25 @@
-import { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronRight, CheckCircle, CreditCard, Truck, Wallet, Loader2 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice } from "../../utils";
-import { PAYMENT_METHODS, INTEGRATION_IDS } from "../../constants";
+import { formatPrice, effectivePrice, toNumber, todayLocalISO, productImage } from "../../utils";
+import { PAYMENT_METHODS } from "../../constants";
 import Button from "../../components/ui/Button";
 import PaymobIframe from "../../components/payment/PaymobIframe";
 import VodafoneCashForm from "../../components/payment/VodafoneCashForm";
-import { initiateCardPayment, initiateVodafoneCash } from "../../services/paymobService";
+import {
+  createPaymentSession,
+  payWithVodafone,
+  verifyPayment,
+} from "../../services/paymobService";
 import toast from "react-hot-toast";
+
+const PENDING_KEY = "pendingPaymobOrder";
+const PLACEHOLDER = "https://placehold.co/100x100/004741/FFFFFF?text=%20";
 
 const CheckoutPage = () => {
   const { language } = useLanguage();
@@ -20,84 +27,281 @@ const CheckoutPage = () => {
   const { addOrder, settings } = useData();
   const { t } = useTranslations();
   const isRtl = language === "ar";
-  const [searchParams] = useSearchParams();
 
-  // ADDED: Dynamic shipping cost from settings
-  const shippingCost = cartItems.length > 0 ? Number(settings?.shippingCost || 0) : 0;
+  const shippingCost = cartItems.length > 0 ? toNumber(settings?.shippingCost) : 0;
   const finalTotal = cartTotal + shippingCost;
 
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
+    email: "",
     address: "",
     city: "",
     notes: "",
     paymentMethod: "cod",
   });
+
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [orderId, setOrderId] = useState("");
+  const [paidTotal, setPaidTotal] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [iframeUrl, setIframeUrl] = useState(null);
+  const [session, setSession] = useState(null); // { merchantOrderId, iframeUrl }
   const [showVodafoneForm, setShowVodafoneForm] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  // Store final total in state so it persists if cart clears during redirect
-  const [redirectTotal, setRedirectTotal] = useState(0);
+  // Guards the resume-on-mount effect so React 18 StrictMode's double-invoke
+  // cannot kick off two verification runs (and two orders).
+  const resumedRef = useRef(false);
 
-  // 1. Handle Paymob Redirect on component mount
+  const finishAsPaid = useCallback(
+    (merchantOrderId, total) => {
+      setOrderId(merchantOrderId);
+      setPaidTotal(total);
+      setIsSubmitted(true);
+      setSession(null);
+      setIsVerifying(false);
+      localStorage.removeItem(PENDING_KEY);
+      clearCart();
+      toast.success(isRtl ? "تم الدفع بنجاح!" : "Payment successful!");
+    },
+    [clearCart, isRtl]
+  );
+
+  /**
+   * Wait for the HMAC-verified callback to land.
+   *
+   * Payment state comes only from the server. The old code marked an order paid
+   * because the URL said `?success=true`, which anyone could type.
+   */
+  const pollForConfirmation = useCallback(
+    async (merchantOrderId, { attempts, intervalMs }) => {
+      setIsVerifying(true);
+
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        try {
+          const result = await verifyPayment(merchantOrderId);
+          if (result.paid) {
+            finishAsPaid(merchantOrderId, toNumber(result.totalCents) / 100);
+            return true;
+          }
+          if (result.status === "failed") {
+            setIsVerifying(false);
+            setSession(null);
+            localStorage.removeItem(PENDING_KEY);
+            toast.error(isRtl ? "فشل الدفع، حاول مرة أخرى" : "Payment failed, please try again");
+            return false;
+          }
+        } catch {
+          // Transient network error — keep waiting.
+        }
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+
+      setIsVerifying(false);
+      toast(
+        isRtl
+          ? "لم نستلم تأكيد الدفع بعد. إذا تم خصم المبلغ، تواصل معنا برقم الطلب."
+          : "We haven't received payment confirmation yet. If you were charged, contact us with your order number.",
+        { duration: 8000 }
+      );
+      return false;
+    },
+    [finishAsPaid, isRtl]
+  );
+
+  // Resume after Paymob sends the customer back as a full page redirect.
   useEffect(() => {
-    const isPaymobRedirect = searchParams.get("success");
-    
-    if (isPaymobRedirect !== null) {
-      const isSuccessful = searchParams.get("success") === "true";
-      
-      if (isSuccessful) {
-        // Retrieve the data we saved before redirecting to Paymob
-        const pendingData = JSON.parse(localStorage.getItem("pendingPaymobOrder") || "{}");
-        
-        if (pendingData.formData) {
-          setFormData(pendingData.formData);
-          setRedirectTotal(pendingData.finalTotal || 0);
-          
-          // Create the order in Firebase now that payment is confirmed
-          const generateOrderNumber = () => {
-            const now = new Date();
-            const datePart = now.getFullYear().toString().slice(-2) +
-              String(now.getMonth() + 1).padStart(2, "0") +
-              String(now.getDate()).padStart(2, "0");
-            const randomPart = Math.floor(1000 + Math.random() * 9000);
-            return `NOM-${datePart}-${randomPart}`;
-          };
+    if (resumedRef.current) return;
+    resumedRef.current = true;
 
-          const newOrderId = generateOrderNumber();
-          
-          const orderData = {
-            id: newOrderId,
-            customerName: pendingData.formData.fullName,
-            phone: pendingData.formData.phone,
-            address: pendingData.formData.address,
-            city: pendingData.formData.city,
-            notes: pendingData.formData.notes,
-            paymentMethod: "card",
-            products: pendingData.products || [],
-            total: pendingData.finalTotal,
-            status: "paid",
-            date: new Date().toISOString().split("T")[0],
-            time: new Date().toLocaleTimeString(),
-          };
+    let pending = null;
+    try {
+      pending = JSON.parse(localStorage.getItem(PENDING_KEY) || "null");
+    } catch {
+      pending = null;
+    }
+    if (!pending?.merchantOrderId) return;
 
-          addOrder(orderData);
-          setOrderId(newOrderId);
+    // Only resume a recent attempt; a week-old key should not resurrect itself.
+    if (pending.startedAt && Date.now() - pending.startedAt > 2 * 60 * 60 * 1000) {
+      localStorage.removeItem(PENDING_KEY);
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, ...(pending.formData || {}) }));
+    pollForConfirmation(pending.merchantOrderId, { attempts: 8, intervalMs: 2000 });
+  }, [pollForConfirmation]);
+
+  // While the payment iframe is open, poll in the background. This replaces the
+  // postMessage listener, which Paymob never actually sends.
+  useEffect(() => {
+    if (!session?.merchantOrderId) return undefined;
+
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const result = await verifyPayment(session.merchantOrderId);
+        if (cancelled) return;
+        if (result.paid) {
+          clearInterval(timer);
+          finishAsPaid(session.merchantOrderId, toNumber(result.totalCents) / 100);
+        }
+      } catch {
+        // Ignore and try again on the next tick.
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [session, finishAsPaid]);
+
+  const generateFallbackOrderNumber = () =>
+    `NOM-${todayLocalISO().replace(/-/g, "").slice(2)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const buildOrder = (id, status, total) => ({
+    id,
+    customerName: formData.fullName,
+    phone: formData.phone,
+    email: formData.email,
+    address: formData.address,
+    city: formData.city,
+    notes: formData.notes,
+    paymentMethod: formData.paymentMethod,
+    products: cartItems.map((item) => ({
+      productId: item.id,
+      nameAr: item.nameAr,
+      nameEn: item.nameEn,
+      price: effectivePrice(item),
+      quantity: item.quantity,
+      image: productImage(item),
+    })),
+    shippingCost,
+    total,
+    status,
+    date: todayLocalISO(),
+    time: new Date().toLocaleTimeString(),
+  });
+
+  const validate = () => {
+    if (!formData.fullName.trim() || !formData.phone.trim() || !formData.address.trim() || !formData.city.trim()) {
+      toast.error(isRtl ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill all required fields");
+      return false;
+    }
+    if (!/^01[0125][0-9]{8}$/.test(formData.phone.replace(/\s/g, ""))) {
+      toast.error(isRtl ? "رقم الهاتف غير صحيح" : "Please enter a valid Egyptian mobile number");
+      return false;
+    }
+    return true;
+  };
+
+  /** Open a server-priced payment session and register the order against it. */
+  const startPaymentSession = async (method) => {
+    const data = await createPaymentSession({
+      cartItems,
+      method,
+      customer: {
+        name: formData.fullName,
+        phone: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        city: formData.city,
+      },
+    });
+
+    // The server decides the total; the browser only reports it.
+    const serverTotal = toNumber(data.totalCents) / 100;
+
+    await addOrder(buildOrder(data.merchantOrderId, "awaiting_payment", serverTotal));
+
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({
+        merchantOrderId: data.merchantOrderId,
+        formData,
+        startedAt: Date.now(),
+      })
+    );
+
+    return data;
+  };
+
+  const handleVodafoneSubmit = async (phoneNumber) => {
+    setIsProcessing(true);
+    try {
+      const data = await startPaymentSession("vodafone");
+      await payWithVodafone(data.merchantOrderId, phoneNumber);
+
+      setShowVodafoneForm(false);
+      toast.success(
+        isRtl ? "تحقق من هاتفك لتأكيد الدفع" : "Check your phone to approve the payment"
+      );
+
+      // Wallet approvals are manual, so allow a couple of minutes.
+      await pollForConfirmation(data.merchantOrderId, { attempts: 40, intervalMs: 3000 });
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || (isRtl ? "فشل الدفع" : "Payment failed"));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    if (formData.paymentMethod === "cod") {
+      setIsProcessing(true);
+      try {
+        const id = generateFallbackOrderNumber();
+        const saved = await addOrder(buildOrder(id, "pending", finalTotal));
+        if (saved) {
+          setOrderId(id);
+          setPaidTotal(finalTotal);
           setIsSubmitted(true);
           clearCart();
-          localStorage.removeItem("pendingPaymobOrder"); // Clean up
-          toast.success(isRtl ? "تم الدفع بنجاح!" : "Payment successful!");
+          toast.success(isRtl ? "تم تأكيد طلبك!" : "Your order has been confirmed!");
         }
-      } else {
-        toast.error(isRtl ? "فشل الدفع" : "Payment failed");
-        localStorage.removeItem("pendingPaymobOrder");
+      } finally {
+        setIsProcessing(false);
       }
+      return;
     }
-  }, [searchParams]);
+
+    if (formData.paymentMethod === "vodafone") {
+      setShowVodafoneForm(true);
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const data = await startPaymentSession("card");
+      setSession({ merchantOrderId: data.merchantOrderId, iframeUrl: data.iframeUrl });
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || (isRtl ? "فشل إعداد الدفع" : "Failed to set up payment"));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+
+  if (isVerifying && !isSubmitted) {
+    return (
+      <div className="pt-32 pb-20 text-center">
+        <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-6" />
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+          {isRtl ? "جاري تأكيد الدفع..." : "Confirming your payment..."}
+        </h2>
+        <p className="text-gray-500 dark:text-gray-400">
+          {isRtl ? "لا تغلق هذه الصفحة" : "Please don't close this page"}
+        </p>
+      </div>
+    );
+  }
 
   if (cartItems.length === 0 && !isSubmitted) {
     return (
@@ -108,20 +312,17 @@ const CheckoutPage = () => {
     );
   }
 
-  // SUCCESS SCREEN WITH DYNAMIC WHATSAPP BUTTON
   if (isSubmitted) {
     const adminWhatsApp = settings?.whatsapp?.replace(/[^0-9]/g, "") || "";
-    const totalForMessage = redirectTotal || finalTotal;
-    
     const waMessage = encodeURIComponent(
       `🛒 *${isRtl ? "طلب جديد" : "New Order"}*\n\n` +
-      `*${isRtl ? "رقم الطلب" : "Order Number"}: ${orderId}*\n\n` +
-      `*${isRtl ? "الاسم" : "Name"}:* ${formData.fullName}\n` +
-      `*${isRtl ? "الهاتف" : "Phone"}:* ${formData.phone}\n` +
-      `*${isRtl ? "العنوان" : "Address"}:* ${formData.address}, ${formData.city}\n` +
-      `*${isRtl ? "الإجمالي" : "Total"}:* ${totalForMessage} EGP\n` +
-      `*${isRtl ? "طريقة الدفع" : "Payment"}:* ${formData.paymentMethod}\n\n` +
-      `${isRtl ? "يرجى تأكيد الطلب" : "Please confirm the order"}`
+        `*${isRtl ? "رقم الطلب" : "Order Number"}: ${orderId}*\n\n` +
+        `*${isRtl ? "الاسم" : "Name"}:* ${formData.fullName}\n` +
+        `*${isRtl ? "الهاتف" : "Phone"}:* ${formData.phone}\n` +
+        `*${isRtl ? "العنوان" : "Address"}:* ${formData.address}, ${formData.city}\n` +
+        `*${isRtl ? "الإجمالي" : "Total"}:* ${paidTotal} EGP\n` +
+        `*${isRtl ? "طريقة الدفع" : "Payment"}:* ${formData.paymentMethod}\n\n` +
+        `${isRtl ? "يرجى تأكيد الطلب" : "Please confirm the order"}`
     );
 
     return (
@@ -139,11 +340,13 @@ const CheckoutPage = () => {
             {t("orderNumber")}: <span className="font-bold text-primary">{orderId}</span>
           </p>
           <p className="text-gray-500 dark:text-gray-400 mb-8">
-            {isRtl ? "يرجى الضغط على الزر بالأسفل لإرسال طلبك لنا عبر واتساب لإتمام التأكيد" : "Please click the button below to send us your order via WhatsApp to confirm"}
+            {isRtl
+              ? "يرجى الضغط على الزر بالأسفل لإرسال طلبك لنا عبر واتساب لإتمام التأكيد"
+              : "Please click the button below to send us your order via WhatsApp to confirm"}
           </p>
-          
+
           <div className="flex flex-col gap-3">
-            <a 
+            <a
               href={`https://wa.me/${adminWhatsApp}?text=${waMessage}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -159,179 +362,22 @@ const CheckoutPage = () => {
     );
   }
 
-  const generateOrderNumber = () => {
-    const now = new Date();
-    const datePart = now.getFullYear().toString().slice(-2) +
-      String(now.getMonth() + 1).padStart(2, "0") +
-      String(now.getDate()).padStart(2, "0");
-    const randomPart = Math.floor(1000 + Math.random() * 9000);
-    return `NOM-${datePart}-${randomPart}`;
-  };
-
-  const createLocalOrder = async (status = "pending", paymobOrderId = null) => {
-    const newOrderId = generateOrderNumber();
-    
-    const orderData = {
-      id: newOrderId,
-      customerName: formData.fullName,
-      phone: formData.phone,
-      address: formData.address,
-      city: formData.city,
-      notes: formData.notes,
-      paymentMethod: formData.paymentMethod,
-      products: cartItems.map((item) => ({
-        productId: item.id,
-        nameAr: item.nameAr,
-        nameEn: item.nameEn,
-        price: item.discountPrice || item.price,
-        quantity: item.quantity,
-        image: item.images[0],
-      })),
-      total: finalTotal, // Uses dynamic total
-      status: status,
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString(),
-      paymobOrderId: paymobOrderId,
-    };
-
-    await addOrder(orderData);
-    return newOrderId;
-  };
-
-  const handlePaymobSuccess = async () => {
-    setIframeUrl(null);
-    const newOrderId = await createLocalOrder("paid");
-    setOrderId(newOrderId);
-    setIsSubmitted(true);
-    clearCart();
-    toast.success(isRtl ? "تم الدفع بنجاح!" : "Payment successful!");
-  };
-
-  const handlePaymobFailure = () => {
-    setIframeUrl(null);
-    toast.error(isRtl ? "فشل الدفع، حاول مرة أخرى" : "Payment failed, please try again");
-  };
-
-  const handleVodafoneSubmit = async (phoneNumber) => {
-    setIsProcessing(true);
-    try {
-      const orderData = {
-        total: finalTotal, // Uses dynamic total
-        email: "customer@example.com",
-        firstName: formData.fullName.split(" ")[0],
-        lastName: formData.fullName.split(" ").slice(1).join(" "),
-        customerName: formData.fullName,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        products: cartItems.map((item) => ({
-          nameEn: item.nameEn,
-          price: item.discountPrice || item.price,
-          quantity: item.quantity,
-        })),
-        integrationId: INTEGRATION_IDS.VODAFONE,
-        vodafoneIntegrationId: INTEGRATION_IDS.VODAFONE,
-      };
-
-      const result = await initiateVodafoneCash(orderData, phoneNumber);
-      
-      if (result.success || result.pending) {
-        setShowVodafoneForm(false);
-        const newOrderId = await createLocalOrder("pending", result.paymobOrderId);
-        setOrderId(newOrderId);
-        setIsSubmitted(true);
-        clearCart();
-        toast.success(isRtl ? "تم إرسال طلب الدفع!" : "Payment request sent! Check your phone.");
-      } else {
-        throw new Error("Payment failed");
-      }
-    } catch (error) {
-      toast.error(isRtl ? "فشل الدفع" : "Payment failed");
-      console.error(error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.fullName || !formData.phone || !formData.address || !formData.city) {
-      toast.error(isRtl ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill all required fields");
-      return;
-    }
-
-    if (formData.paymentMethod === "cod") {
-      const newOrderId = await createLocalOrder("pending");
-      setOrderId(newOrderId);
-      setIsSubmitted(true);
-      clearCart();
-      toast.success(isRtl ? "تم تأكيد طلبك!" : "Your order has been confirmed!");
-      return;
-    }
-
-    if (formData.paymentMethod === "card") {
-      setIsProcessing(true);
-      try {
-        // SAVE DATA TO LOCAL STORAGE IN CASE PAYMOB REDIRECTS THE PAGE
-        localStorage.setItem("pendingPaymobOrder", JSON.stringify({
-          formData: formData,
-          products: cartItems.map((item) => ({
-            productId: item.id,
-            nameAr: item.nameAr,
-            nameEn: item.nameEn,
-            price: item.discountPrice || item.price,
-            quantity: item.quantity,
-            image: item.images[0],
-          })),
-          finalTotal: finalTotal // Save dynamic total
-        }));
-
-        const orderData = {
-          total: finalTotal, // Uses dynamic total
-          email: "customer@example.com",
-          firstName: formData.fullName.split(" ")[0],
-          lastName: formData.fullName.split(" ").slice(1).join(" "),
-          customerName: formData.fullName,
-          phone: formData.phone,
-          address: formData.address,
-          city: formData.city,
-          products: cartItems.map((item) => ({
-            nameEn: item.nameEn,
-            price: item.discountPrice || item.price,
-            quantity: item.quantity,
-          })),
-          integrationId: INTEGRATION_IDS.CARD,
-        };
-
-        const { iframeUrl: url } = await initiateCardPayment(orderData);
-        setIframeUrl(url);
-      } catch (error) {
-        toast.error(isRtl ? "فشل إعداد الدفع" : "Failed to setup payment");
-        console.error(error);
-      } finally {
-        setIsProcessing(false);
-      }
-      return;
-    }
-
-    if (formData.paymentMethod === "vodafone") {
-      setShowVodafoneForm(true);
-      return;
-    }
-  };
-
   const paymentIcons = {
     cod: <Truck className="w-5 h-5" />,
     card: <CreditCard className="w-5 h-5" />,
     vodafone: <Wallet className="w-5 h-5" />,
   };
 
-  const getSubmitButtonText = () => {
+  const submitLabel = () => {
     if (isProcessing) return isRtl ? "جاري المعالجة..." : "Processing...";
     if (formData.paymentMethod === "cod") return t("placeOrder");
     return isRtl ? "الدفع الآن" : "Pay Now";
   };
+
+  const field = (key) => ({
+    value: formData[key],
+    onChange: (e) => setFormData((p) => ({ ...p, [key]: e.target.value })),
+  });
 
   return (
     <div className="pt-24 pb-20">
@@ -356,70 +402,51 @@ const CheckoutPage = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {t("fullName")} <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.fullName}
-                    onChange={(e) => setFormData((p) => ({ ...p, fullName: e.target.value }))}
-                    className="input-field"
-                    placeholder={isRtl ? "الاسم الكامل" : "Full Name"}
-                  />
+                  <input type="text" required {...field("fullName")} className="input-field"
+                    placeholder={isRtl ? "الاسم الكامل" : "Full Name"} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     {t("phoneNumber")} <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
-                    className="input-field"
-                    placeholder="01XXXXXXXXX"
-                    dir="ltr"
-                  />
+                  <input type="tel" required {...field("phone")} className="input-field"
+                    placeholder="01XXXXXXXXX" dir="ltr" />
                 </div>
+              </div>
+
+              {/* Collected so payment receipts reach the customer instead of a
+                  hardcoded placeholder address. */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {isRtl ? "البريد الإلكتروني" : "Email"}
+                </label>
+                <input type="email" {...field("email")} className="input-field"
+                  placeholder={isRtl ? "لإرسال إيصال الدفع (اختياري)" : "For your payment receipt (optional)"}
+                  dir="ltr" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t("address")} <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.address}
-                  onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
-                  className="input-field"
-                  placeholder={isRtl ? "العنوان بالتفصيل" : "Detailed Address"}
-                />
+                <input type="text" required {...field("address")} className="input-field"
+                  placeholder={isRtl ? "العنوان بالتفصيل" : "Detailed Address"} />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t("city")} <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.city}
-                  onChange={(e) => setFormData((p) => ({ ...p, city: e.target.value }))}
-                  className="input-field"
-                  placeholder={isRtl ? "المحافظة / المدينة" : "Governorate / City"}
-                />
+                <input type="text" required {...field("city")} className="input-field"
+                  placeholder={isRtl ? "المحافظة / المدينة" : "Governorate / City"} />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {isRtl ? "ملاحظات إضافية" : "Additional Notes"}
                 </label>
-                <textarea
-                  rows={3}
-                  value={formData.notes}
-                  onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
-                  className="input-field resize-none"
-                  placeholder={isRtl ? "أي ملاحظات خاصة بالطلب..." : "Any special instructions..."}
-                />
+                <textarea rows={3} {...field("notes")} className="input-field resize-none"
+                  placeholder={isRtl ? "أي ملاحظات خاصة بالطلب..." : "Any special instructions..."} />
               </div>
 
               <div>
@@ -445,8 +472,8 @@ const CheckoutPage = () => {
                         className="sr-only"
                       />
                       <div className={`p-2 rounded-lg ${
-                        formData.paymentMethod === method.id 
-                          ? "bg-primary/10 text-primary" 
+                        formData.paymentMethod === method.id
+                          ? "bg-primary/10 text-primary"
                           : "bg-gray-100 dark:bg-slate-700 text-gray-500"
                       }`}>
                         {paymentIcons[method.id]}
@@ -454,13 +481,6 @@ const CheckoutPage = () => {
                       <span className="text-sm font-medium text-gray-900 dark:text-white">
                         {isRtl ? method.labelAr : method.labelEn}
                       </span>
-                      {formData.paymentMethod === method.id && (
-                        <div className="ml-auto">
-                          <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                            <div className="w-2 h-2 rounded-full bg-white" />
-                          </div>
-                        </div>
-                      )}
                     </label>
                   ))}
                 </div>
@@ -470,10 +490,10 @@ const CheckoutPage = () => {
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    {getSubmitButtonText()}
+                    {submitLabel()}
                   </>
                 ) : (
-                  getSubmitButtonText()
+                  submitLabel()
                 )}
               </Button>
             </form>
@@ -488,12 +508,10 @@ const CheckoutPage = () => {
                   <div key={item.id} className="flex gap-3">
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700 flex-shrink-0">
                       <img
-                        src={item.images[0]}
+                        src={productImage(item) || PLACEHOLDER}
                         alt={isRtl ? item.nameAr : item.nameEn}
                         className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.target.src = `https://placehold.co/100x100/004741/FFFFFF?text=X`;
-                        }}
+                        onError={(e) => { e.target.src = PLACEHOLDER; }}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -503,7 +521,7 @@ const CheckoutPage = () => {
                       <p className="text-xs text-gray-500">x{item.quantity}</p>
                     </div>
                     <p className="text-sm font-medium">
-                      {formatPrice((item.discountPrice || item.price) * item.quantity, language)}
+                      {formatPrice(effectivePrice(item) * item.quantity, language)}
                     </p>
                   </div>
                 ))}
@@ -514,14 +532,12 @@ const CheckoutPage = () => {
                   <span className="text-gray-500 dark:text-gray-400">{t("subtotal")}</span>
                   <span>{formatPrice(cartTotal, language)}</span>
                 </div>
-                {/* CHANGED: Show dynamic shipping cost */}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">{isRtl ? "التوصيل" : "Shipping"}</span>
                   <span className="text-gray-900 dark:text-white">{formatPrice(shippingCost, language)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-100 dark:border-slate-700">
                   <span className="text-gray-900 dark:text-white">{t("total")}</span>
-                  {/* CHANGED: Display finalTotal instead of cartTotal */}
                   <span className="text-primary">{formatPrice(finalTotal, language)}</span>
                 </div>
               </div>
@@ -530,12 +546,13 @@ const CheckoutPage = () => {
         </div>
       </div>
 
-      {iframeUrl && (
+      {session?.iframeUrl && (
         <PaymobIframe
-          url={iframeUrl}
-          onClose={() => setIframeUrl(null)}
-          onSuccess={handlePaymobSuccess}
-          onFailure={handlePaymobFailure}
+          url={session.iframeUrl}
+          onClose={() => {
+            setSession(null);
+            toast(isRtl ? "تم إلغاء الدفع" : "Payment cancelled");
+          }}
         />
       )}
 
