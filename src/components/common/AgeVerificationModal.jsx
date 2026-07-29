@@ -7,17 +7,33 @@ import { LOCAL_STORAGE_KEYS } from "../../constants";
 const AgeVerificationModal = () => {
   const { language } = useLanguage();
   const isRtl = language === "ar";
-  const [visible, setVisible] = useState(false);
 
-  useEffect(() => {
-    const verified = localStorage.getItem(LOCAL_STORAGE_KEYS.AGE_VERIFIED);
-    if (verified !== "true") {
-      setVisible(true);
+  // Read synchronously during the first render. Deciding this in an effect
+  // painted the shop for a frame before the gate appeared.
+  const [visible, setVisible] = useState(() => {
+    try {
+      return localStorage.getItem(LOCAL_STORAGE_KEYS.AGE_VERIFIED) !== "true";
+    } catch {
+      return true;
     }
-  }, []);
+  });
+
+  // Hold the page still while the gate is up.
+  useEffect(() => {
+    if (!visible) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [visible]);
 
   const handleYes = () => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.AGE_VERIFIED, "true");
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.AGE_VERIFIED, "true");
+    } catch {
+      // Private browsing — let them through for this session anyway.
+    }
     setVisible(false);
   };
 

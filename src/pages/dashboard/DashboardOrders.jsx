@@ -26,6 +26,9 @@ const DashboardOrders = () => {
 
   const statusOptions = [
     { value: "all", labelAr: "الكل", labelEn: "All" },
+    // Card and wallet orders sit here until callback.php verifies the payment.
+    { value: "awaiting_payment", labelAr: "بانتظار الدفع", labelEn: "Awaiting payment" },
+    { value: "paid", labelAr: "مدفوع", labelEn: "Paid" },
     { value: "pending", labelAr: "معلق", labelEn: "Pending" },
     { value: "confirmed", labelAr: "مؤكد", labelEn: "Confirmed" },
     { value: "preparing", labelAr: "قيد التحضير", labelEn: "Preparing" },

@@ -29,6 +29,8 @@ export const SORT_OPTIONS = [
 ];
 
 export const ORDER_STATUS = {
+  AWAITING_PAYMENT: "awaiting_payment",
+  PAID: "paid",
   PENDING: "pending",
   CONFIRMED: "confirmed",
   PREPARING: "preparing",

@@ -34,17 +34,15 @@ export const LanguageProvider = ({ children }) => {
     setLanguageState((prev) => (prev === "ar" ? "en" : "ar"));
   };
 
-  const t = (key) => {
-    // This will be connected to translations data
-    return key;
-  };
-
+  // No `t` here on purpose: this used to return the key unchanged, so anything
+  // that picked it up rendered raw strings like "emptyCart". Use the
+  // useTranslations hook instead.
   const isRTL = language === "ar";
   const isLTR = language === "en";
 
   return (
     <LanguageContext.Provider
-      value={{ language, setLanguage, toggleLanguage, dir, isRTL, isLTR, t }}
+      value={{ language, setLanguage, toggleLanguage, dir, isRTL, isLTR }}
     >
       {children}
     </LanguageContext.Provider>
