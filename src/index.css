@@ -1,0 +1,168 @@
+/* Google Fonts — MUST be first before any other rules */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #004741;
+  --color-primary-light: #006b62;
+  --color-primary-dark: #00332e;
+  --color-secondary: #F0EDE4;
+  --color-secondary-light: #FAF9F6;
+  --color-secondary-dark: #E0DDD4;
+  --color-accent: #D4A843;
+  --color-accent-light: #E8C76A;
+  --color-accent-dark: #B8922E;
+}
+
+/* Base Styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', 'Cairo', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  [dir="rtl"] body {
+    font-family: 'Cairo', 'Inter', sans-serif;
+  }
+
+  /* Smooth theme transitions */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 200ms;
+    transition-timing-function: ease-in-out;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+}
+
+@layer components {
+  /* Primary button */
+  .btn-primary {
+    @apply bg-primary text-white px-6 py-3 rounded-xl font-medium 
+           hover:bg-primary-light active:bg-primary-dark 
+           transition-all duration-200 shadow-sm hover:shadow-md
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Secondary button */
+  .btn-secondary {
+    @apply bg-secondary text-primary px-6 py-3 rounded-xl font-medium 
+           hover:bg-secondary-dark active:bg-secondary-dark
+           transition-all duration-200 border border-primary/10;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply px-6 py-3 rounded-xl font-medium text-primary 
+           hover:bg-primary/5 active:bg-primary/10
+           transition-all duration-200;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-white dark:bg-slate-800 rounded-2xl shadow-sm 
+           border border-gray-100 dark:border-slate-700
+           hover:shadow-md transition-shadow duration-300;
+  }
+
+  /* Input */
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-600
+           bg-white dark:bg-slate-800 text-gray-900 dark:text-white
+           placeholder:text-gray-400 dark:placeholder:text-gray-500
+           focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+           transition-all duration-200;
+  }
+
+  /* Section title */
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-gray-900 dark:text-white
+           tracking-tight leading-tight;
+  }
+
+  /* Section subtitle */
+  .section-subtitle {
+    @apply text-lg text-gray-500 dark:text-gray-400 mt-2;
+  }
+
+  /* Container */
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 dark:bg-slate-700 rounded-lg;
+  }
+}
+
+@layer utilities {
+  /* RTL utilities */
+  .rtl\:space-x-reverse > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-x-reverse: 1;
+  }
+
+  .rtl\:text-right {
+    text-align: right;
+  }
+
+  .ltr\:text-left {
+    text-align: left;
+  }
+
+  /* Gradient text - use Tailwind v4 arbitrary value syntax */
+  .gradient-text {
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(to right, var(--color-primary), var(--color-primary-light));
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

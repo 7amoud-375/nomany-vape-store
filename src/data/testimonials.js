@@ -1,0 +1,48 @@
+export const testimonials = [
+  {
+    id: 1,
+    nameAr: "أحمد محمد",
+    nameEn: "Ahmed Mohamed",
+    roleAr: "عميل مميز",
+    roleEn: "Premium Customer",
+    contentAr: "أفضل متجر فيب في المنطقة! المنتجات أصلية والأسعار ممتازة. التوصيل سريع جداً.",
+    contentEn: "Best vape store in the region! Authentic products and excellent prices. Very fast delivery.",
+    avatar: "/images/testimonials/avatar-1.jpg",
+    rating: 5,
+  },
+  {
+    id: 2,
+    nameAr: "سارة علي",
+    nameEn: "Sara Ali",
+    roleAr: "عميلة دائمة",
+    roleEn: "Regular Customer",
+    contentAr: "خدمة العملاء رائعة والمنتجات دائماً بجودة عالية. أنصح الجميع بالتسوق من هنا.",
+    contentEn: "Great customer service and products are always high quality. I recommend everyone to shop here.",
+    avatar: "/images/testimonials/avatar-2.jpg",
+    rating: 5,
+  },
+  {
+    id: 3,
+    nameAr: "خالد عبدالله",
+    nameEn: "Khaled Abdullah",
+    roleAr: "عميل جديد",
+    roleEn: "New Customer",
+    contentAr: "تجربة شراء ممتازة. الموقع سهل الاستخدام والمنتجات وصلت بسرعة. سأشتري مرة أخرى بالتأكيد.",
+    contentEn: "Excellent shopping experience. The website is easy to use and products arrived quickly. Will definitely buy again.",
+    avatar: "/images/testimonials/avatar-3.jpg",
+    rating: 4,
+  },
+  {
+    id: 4,
+    nameAr: "فاطمة حسن",
+    nameEn: "Fatima Hassan",
+    roleAr: "عميلة مميزة",
+    roleEn: "Premium Customer",
+    contentAr: "تشكيلة رائعة من السوائل والنكهات. الأسعار تنافسية والجودة ممتازة. شكراً لكم!",
+    contentEn: "Great selection of liquids and flavors. Competitive prices and excellent quality. Thank you!",
+    avatar: "/images/testimonials/avatar-4.jpg",
+    rating: 5,
+  },
+];
+
+export default testimonials;

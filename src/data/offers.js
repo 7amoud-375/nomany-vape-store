@@ -1,0 +1,43 @@
+export const offers = [
+  {
+    id: 1,
+    titleAr: "تخفيضات الصيف",
+    titleEn: "Summer Sale",
+    descriptionAr: "خصومات حصرية على أجهزة الفيب",
+    descriptionEn: "Exclusive discounts on vape devices",
+    discountPercentage: 25,
+    image: "/images/banners/offer-1.jpg",
+    products: [1, 3, 13],
+    active: true,
+    startDate: "2026-07-01",
+    endDate: "2026-08-31",
+  },
+  {
+    id: 2,
+    titleAr: "عروض السوائل",
+    titleEn: "Liquid Deals",
+    descriptionAr: "اشتري 2 واحصل على الثالث مجاناً",
+    descriptionEn: "Buy 2 get 1 free",
+    discountPercentage: 33,
+    image: "/images/banners/offer-2.jpg",
+    products: [7, 8, 9, 16],
+    active: true,
+    startDate: "2026-07-01",
+    endDate: "2026-09-30",
+  },
+  {
+    id: 3,
+    titleAr: "بكج المبتدئين",
+    titleEn: "Beginner Bundle",
+    descriptionAr: "جهاز + بود + سائل بسعر مميز",
+    descriptionEn: "Device + pod + liquid at a special price",
+    discountPercentage: 20,
+    image: "/images/banners/offer-3.jpg",
+    products: [6, 4, 7],
+    active: true,
+    startDate: "2026-07-01",
+    endDate: "2026-12-31",
+  },
+];
+
+export default offers;

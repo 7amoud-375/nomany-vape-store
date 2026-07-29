@@ -1,0 +1,43 @@
+export const banners = [
+  {
+    id: 1,
+    titleAr: "أحدث أجهزة الفيب",
+    titleEn: "Latest Vape Devices",
+    subtitleAr: "اكتشف تشكيلتنا الجديدة من أجهزة الفيب المتميزة",
+    subtitleEn: "Discover our new collection of premium vape devices",
+    image: "/images/banners/hero-1.jpg",
+    buttonTextAr: "تسوق الآن",
+    buttonTextEn: "Shop Now",
+    buttonLink: "/products",
+    order: 1,
+    active: true,
+  },
+  {
+    id: 2,
+    titleAr: "عروض حصرية",
+    titleEn: "Exclusive Offers",
+    subtitleAr: "خصومات تصل إلى 30% على منتجات مختارة",
+    subtitleEn: "Up to 30% off on selected products",
+    image: "/images/banners/hero-2.jpg",
+    buttonTextAr: "اكتشف العروض",
+    buttonTextEn: "Discover Offers",
+    buttonLink: "/offers",
+    order: 2,
+    active: true,
+  },
+  {
+    id: 3,
+    titleAr: "سوائل فاخرة",
+    titleEn: "Premium Liquids",
+    subtitleAr: "نكهات فريدة من أفضل الماركات العالمية",
+    subtitleEn: "Unique flavors from the world's best brands",
+    image: "/images/banners/hero-3.jpg",
+    buttonTextAr: "تصفح السوائل",
+    buttonTextEn: "Browse Liquids",
+    buttonLink: "/categories/liquids",
+    order: 3,
+    active: true,
+  },
+];
+
+export default banners;
