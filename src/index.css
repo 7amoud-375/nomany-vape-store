@@ -15,6 +15,34 @@
   --color-accent: #D4A843;
   --color-accent-light: #E8C76A;
   --color-accent-dark: #B8922E;
+
+  /* Surfaces, so every panel does not pick its own slate shade by hand. */
+  --color-surface: #ffffff;
+  --color-surface-raised: #FAF9F6;
+  --color-hairline: #f1f1ef;
+}
+
+/*
+ * Dark theme.
+ *
+ * The brand teal (#004741) is almost black — on a dark background a
+ * `bg-primary` button barely separated from the page and `text-primary` was
+ * effectively invisible. Redefining the variables here (rather than sprinkling
+ * dark: overrides through every component) lifts the whole palette at once, so
+ * existing `bg-primary` / `text-primary` / `border-primary` classes all adapt.
+ */
+.dark {
+  --color-primary: #2eb9a7;
+  --color-primary-light: #4fd3c0;
+  --color-primary-dark: #1c8b7d;
+
+  --color-accent: #E0B75A;
+  --color-accent-light: #F0CE7E;
+  --color-accent-dark: #B8922E;
+
+  --color-surface: #0f172a;
+  --color-surface-raised: #1e293b;
+  --color-hairline: #1e293b;
 }
 
 /* Base Styles */
@@ -71,17 +99,27 @@
 @layer components {
   /* Primary button */
   .btn-primary {
-    @apply bg-primary text-white px-6 py-3 rounded-xl font-medium 
-           hover:bg-primary-light active:bg-primary-dark 
+    @apply bg-primary text-white px-6 py-3 rounded-xl font-medium
+           hover:bg-primary-light active:bg-primary-dark
            transition-all duration-200 shadow-sm hover:shadow-md
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  /* The dark-theme teal is light, so white text on it fails contrast badly
+     (~1.9:1). Near-black text on the same fill reads at roughly 9:1. */
+  .dark .btn-primary {
+    color: #04211f;
+  }
+
   /* Secondary button */
   .btn-secondary {
-    @apply bg-secondary text-primary px-6 py-3 rounded-xl font-medium 
+    @apply bg-secondary text-primary px-6 py-3 rounded-xl font-medium
            hover:bg-secondary-dark active:bg-secondary-dark
            transition-all duration-200 border border-primary/10;
+  }
+
+  .dark .btn-secondary {
+    @apply bg-slate-800 text-primary border-slate-700 hover:bg-slate-700;
   }
 
   /* Ghost button */
@@ -91,18 +129,19 @@
            transition-all duration-200;
   }
 
-  /* Card */
+  /* Card — one step lighter than the page (slate-950), not two, so panels read
+     as raised without the jump the old slate-800 gave. */
   .card {
-    @apply bg-white dark:bg-slate-800 rounded-2xl shadow-sm 
-           border border-gray-100 dark:border-slate-700
+    @apply bg-white dark:bg-slate-900 rounded-2xl shadow-sm
+           border border-gray-100 dark:border-slate-800
            hover:shadow-md transition-shadow duration-300;
   }
 
   /* Input */
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-600
-           bg-white dark:bg-slate-800 text-gray-900 dark:text-white
-           placeholder:text-gray-400 dark:placeholder:text-gray-500
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700
+           bg-white dark:bg-slate-800/80 text-gray-900 dark:text-white
+           placeholder:text-gray-400 dark:placeholder:text-slate-500
            focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
            transition-all duration-200;
   }
@@ -164,5 +203,46 @@
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Ambient page decorations.
+ *
+ * Slow, low-contrast drifting shapes behind the content. Deliberately long
+ * durations and small offsets: anything faster reads as a distraction on a
+ * shop page you are trying to read prices on.
+ * ------------------------------------------------------------------------ */
+@keyframes deco-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(2%, -3%, 0) scale(1.06); }
+  66%      { transform: translate3d(-2%, 2%, 0) scale(0.96); }
+}
+
+@keyframes deco-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(4deg); }
+}
+
+@keyframes deco-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.6; }
+}
+
+.deco-drift { animation: deco-drift 26s ease-in-out infinite; }
+.deco-float { animation: deco-float 9s ease-in-out infinite; }
+.deco-pulse { animation: deco-pulse 7s ease-in-out infinite; }
+
+/* Honour the OS setting — for some people this kind of motion causes real
+   discomfort, and none of it carries information. */
+@media (prefers-reduced-motion: reduce) {
+  .deco-drift,
+  .deco-float,
+  .deco-pulse {
+    animation: none;
+  }
+
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
   }
 }
