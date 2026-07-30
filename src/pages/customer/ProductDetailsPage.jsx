@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Heart, ShoppingCart, Star, Minus, Plus, ChevronRight, Truck, Shield, RotateCcw, BellRing, Loader2 } from "lucide-react";
+import { Heart, ShoppingCart, Star, Minus, Plus, ChevronRight, Truck, Shield, RotateCcw, BellRing, Loader2, Maximize2 } from "lucide-react";
+import ImageLightbox from "../../components/product/ImageLightbox";
+
+const PLACEHOLDER = "https://placehold.co/600x600/004741/FFFFFF?text=%20";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -27,6 +30,7 @@ const ProductDetailsPage = () => {
   const product = getProductById(id);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
   
   // State for Notify Me
   const [notifyContact, setNotifyContact] = useState("");
@@ -44,6 +48,11 @@ const ProductDetailsPage = () => {
 
   const name = language === "ar" ? product.nameAr : product.nameEn;
   const description = language === "ar" ? product.descriptionAr : product.descriptionEn;
+  // Drop blanks so a product saved with an empty slot does not render a broken
+  // thumbnail or open an empty lightbox pane.
+  const gallery = (Array.isArray(product.images) ? product.images : []).filter(
+    (src) => typeof src === "string" && src.trim() !== ""
+  );
   const price = effectivePrice(product);
   const discount = calculateDiscount(product.price, product.discountPrice);
   const related = getRelatedProducts(product.id, product.category);
@@ -91,27 +100,38 @@ const ProductDetailsPage = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 dark:bg-slate-700 mb-4">
+            <button
+              type="button"
+              onClick={() => gallery.length > 0 && setLightboxIndex(selectedImage)}
+              className="group relative w-full aspect-square rounded-2xl overflow-hidden bg-gray-100 dark:bg-slate-700 mb-4 cursor-zoom-in"
+              aria-label={isRtl ? "تكبير الصورة" : "Enlarge image"}
+            >
               <img
-                src={(product.images || [])[selectedImage] || productImage(product) || "https://placehold.co/600x600/004741/FFFFFF?text=%20"}
+                src={gallery[selectedImage] || PLACEHOLDER}
                 alt={name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 onError={(e) => {
-                  e.target.src = `https://placehold.co/600x600/004741/FFFFFF?text=${encodeURIComponent(name)}`;
+                  e.currentTarget.src = PLACEHOLDER;
                 }}
               />
-            </div>
-            {(product.images || []).length > 1 && (
-              <div className="flex gap-3">
-                {(product.images || []).map((img, i) => (
+              <span className="absolute bottom-3 end-3 w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm
+                               text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Maximize2 className="w-4 h-4" />
+              </span>
+            </button>
+
+            {gallery.length > 1 && (
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {gallery.map((img, i) => (
                   <button
-                    key={i}
+                    key={`${img}-${i}`}
                     onClick={() => setSelectedImage(i)}
-                    className={`w-20 h-20 rounded-xl overflow-hidden border-2 transition-colors ${
-                      selectedImage === i ? "border-primary" : "border-transparent"
+                    onDoubleClick={() => setLightboxIndex(i)}
+                    className={`w-20 h-20 rounded-xl overflow-hidden border-2 shrink-0 transition-colors ${
+                      selectedImage === i ? "border-primary" : "border-transparent hover:border-gray-300"
                     }`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -273,6 +293,19 @@ const ProductDetailsPage = () => {
           </div>
         )}
       </div>
+
+      <ImageLightbox
+        images={gallery}
+        index={lightboxIndex}
+        alt={name}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={(next) => {
+          setLightboxIndex(next);
+          // Keep the page behind in step, so closing leaves you on the image
+          // you were last looking at.
+          setSelectedImage(next);
+        }}
+      />
     </div>
   );
 };

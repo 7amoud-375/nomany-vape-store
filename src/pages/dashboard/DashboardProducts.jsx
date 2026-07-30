@@ -4,11 +4,11 @@ import { Plus, Pencil, Trash2, Copy, Eye, ImageIcon, Bell, Search } from "lucide
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, effectivePrice } from "../../utils";
-import DataTable from "../../components/dashboard/DataTable";
+import { formatPrice, effectivePrice, productImage } from "../../utils";
+import { CardGrid, AdminCard } from "../../components/dashboard/AdminCardGrid";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
-import ImageUploader from "../../components/dashboard/ImageUploader";
+import MultiImageUploader from "../../components/dashboard/MultiImageUploader";
 import GalleryPicker from "../../components/dashboard/GalleryPicker";
 
 // 1. ProductForm stays outside
@@ -37,12 +37,9 @@ const ProductForm = ({ formData, setFormData, language, t, brands, categories, h
     </div>
 
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        {language === "ar" ? "صورة المنتج" : "Product Image"}
-      </label>
-      <ImageUploader
-        value={(formData.images || [])[0] || ""}
-        onChange={(src) => setFormData((p) => ({ ...p, images: [src] }))}
+      <MultiImageUploader
+        images={formData.images}
+        onChange={(images) => setFormData((p) => ({ ...p, images }))}
         language={language}
       />
       <button
@@ -313,117 +310,6 @@ const DashboardProducts = () => {
 
   const isPhoneContact = (contact) => /^[+\d\s-]+$/.test(contact);
 
-  const columns = [
-    {
-      key: "images",
-      header: "",  
-      render: (product) => (
-        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700">
-          <img
-            src={product?.images?.[0] || "https://placehold.co/100x100/004741/FFFFFF?text=P"}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.target.src = "https://placehold.co/100x100/004741/FFFFFF?text=P";
-            }}
-          />
-        </div>
-      ),
-    },
-    {
-      key: "name",
-      header: t("productName"),  
-      render: (product) => (
-        <span>{language === "ar" ? product?.nameAr : product?.nameEn}</span>
-      ),
-    },
-    {
-      key: "brand",
-      header: t("brand"),
-      // Products store the brand id; resolve it to a display name the same way
-      // the category column does.
-      render: (product) => {
-        const brand = brands.find((b) => b.id === product?.brand);
-        return <span>{brand?.name || product?.brand || "-"}</span>;
-      },
-    },
-    {
-      key: "price",
-      header: t("price"),
-      render: (product) => (
-        <div>
-          {formatPrice(effectivePrice(product), language)}
-          {product?.discountPrice && (
-            <span className="text-xs text-gray-400 line-through ml-2">
-              {formatPrice(product?.price, language)}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "category",
-      header: t("category"),
-      render: (product) => {
-        const cat = categories.find((c) => c.id === product?.category);
-        return <span>{cat ? (language === "ar" ? cat.nameAr : cat.nameEn) : product?.category || "-"}</span>;
-      },
-    },
-    {
-      key: "availability",
-      header: t("availability"),
-      render: (product) => (
-        <span
-          className={`px-2 py-1 rounded-lg text-xs font-medium ${
-            product?.availability ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-          }`}
-        >
-          {product?.availability ? t("inStock") : t("outOfStock")}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      header: t("actions") || "Actions",
-      render: (product) => (
-        <div className="flex items-center gap-1">
-          <Link
-            to={`/products/${product?.id}`}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500"
-          >
-            <Eye className="w-4 h-4" />
-          </Link>
-          <button
-            onClick={() => handleEdit(product)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-blue-500"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => duplicateProduct(product)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-          
-          <button
-            onClick={() => openAlertsModal(product)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-amber-500"
-            title={language === "ar" ? "طلبات التنبيه" : "Notify Requests"}
-          >
-            <Bell className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setDeleteModal({ open: true, product })}
-            className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      ),
-    },
-  ];
 
   return (
     <div>
@@ -447,10 +333,57 @@ const DashboardProducts = () => {
         />
       </div>
 
-      <div className="card overflow-hidden">
-        {/* CHANGED: Pass filteredProducts to DataTable */}
-        <DataTable columns={columns} data={filteredProducts} />
-      </div>
+      <CardGrid
+        isEmpty={filteredProducts.length === 0}
+        empty={
+          searchQuery
+            ? language === "ar" ? "مفيش نتائج للبحث ده" : "No products match that search"
+            : language === "ar" ? "لسه مفيش منتجات — ابدأ بإضافة واحد" : "No products yet — add your first one"
+        }
+      >
+        {filteredProducts.map((product, index) => {
+          const brand = brands.find((b) => b.id === product?.brand);
+          const category = categories.find((c) => c.id === product?.category);
+          const discounted = effectivePrice(product) < Number(product?.price);
+
+          return (
+            <AdminCard
+              key={product.id}
+              index={index}
+              image={productImage(product)}
+              title={language === "ar" ? product?.nameAr : product?.nameEn}
+              subtitle={[brand?.name, category && (language === "ar" ? category.nameAr : category.nameEn)]
+                .filter(Boolean)
+                .join(" · ")}
+              badges={[
+                product?.availability
+                  ? { label: language === "ar" ? "متوفر" : "In stock", className: "bg-green-500/90 text-white" }
+                  : { label: language === "ar" ? "نافد" : "Out", className: "bg-red-500/90 text-white" },
+                ...(product?.featured ? [{ label: language === "ar" ? "مميز" : "Featured", className: "bg-primary/90 text-white" }] : []),
+                ...((product?.images?.length ?? 0) > 1
+                  ? [{ label: `${product.images.length} 🖼`, className: "bg-black/60 text-white" }]
+                  : []),
+              ]}
+              meta={
+                <div className="flex items-baseline gap-2">
+                  <span className="font-bold text-primary">{formatPrice(effectivePrice(product), language)}</span>
+                  {discounted && (
+                    <span className="text-xs text-gray-400 line-through">
+                      {formatPrice(product.price, language)}
+                    </span>
+                  )}
+                </div>
+              }
+              actions={[
+                { icon: Pencil, label: t("edit") || "Edit", tone: "primary", onClick: () => handleEdit(product) },
+                { icon: Copy, label: "Duplicate", onClick: () => duplicateProduct(product) },
+                { icon: Bell, label: "Notify requests", onClick: () => openAlertsModal(product) },
+                { icon: Trash2, label: t("delete") || "Delete", tone: "danger", onClick: () => setDeleteModal({ open: true, product }) },
+              ]}
+            />
+          );
+        })}
+      </CardGrid>
 
       <Modal isOpen={addModal} onClose={() => setAddModal(false)} title={t("addProduct")} size="lg">
         <ProductForm 
