@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { ADMIN_LOGIN_PATH } from "../constants";
 import DashboardSidebar from "../components/dashboard/DashboardSidebar";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 
@@ -11,11 +12,10 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isLoading) {
-      // If not logged in, or if logged in but NOT an admin -> redirect to home
-      if (!isAuthenticated || userRole !== 'admin') {
-        navigate("/");
-      }
+    if (!isLoading && (!isAuthenticated || userRole !== "admin")) {
+      // Send them to the sign-in form rather than the storefront, so an expired
+      // session does not silently dump the admin on the home page.
+      navigate(ADMIN_LOGIN_PATH, { replace: true });
     }
   }, [isAuthenticated, isLoading, userRole, navigate]);
 

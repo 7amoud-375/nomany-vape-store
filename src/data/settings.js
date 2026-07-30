@@ -17,7 +17,30 @@ export const settings = {
   footerTextEn: "Nomany Store - your first destination for vape devices and liquids",
   hashtagAr: "#النعماني_بتاع_الفيب",
   hashtagEn: "#Nomany_Bta3_Elvape",
+  tiktok: "",
   shippingCost: 80, // ADDED: Default shipping cost
+
+  // Return policy shown at /return-policy. Fully editable from
+  // Dashboard -> Settings; these are only the starting text.
+  returnPolicyAr: `يحق لك استبدال أو إرجاع المنتج خلال 14 يوم من تاريخ الاستلام، بشرط أن يكون المنتج بحالته الأصلية وبكامل عبواته وملحقاته وغير مستخدم.
+
+لأسباب صحية، لا يمكن إرجاع السوائل (الليكويد) أو الكويلات أو أي منتج تم فتح غلافه المحكم.
+
+في حالة وصول المنتج تالفًا أو مختلفًا عن الطلب، تواصل معنا خلال 48 ساعة من الاستلام وسنتحمل تكلفة الاستبدال بالكامل.
+
+تكاليف الشحن الخاصة بالإرجاع يتحملها العميل، إلا في حالة وجود عيب مصنعي أو خطأ من جانبنا.
+
+يتم رد المبلغ بنفس وسيلة الدفع خلال 7 أيام عمل من استلامنا للمنتج ومراجعته.`,
+
+  returnPolicyEn: `You may return or exchange a product within 14 days of delivery, provided it is unused and in its original condition with all packaging and accessories.
+
+For health reasons, e-liquids, coils, and any product with a broken seal cannot be returned.
+
+If a product arrives damaged or different from what you ordered, contact us within 48 hours of delivery and we will cover the full cost of the exchange.
+
+Return shipping is paid by the customer, except where the item is faulty or we made an error.
+
+Refunds are issued to the original payment method within 7 working days of us receiving and inspecting the product.`,
 };
 
 export default settings;

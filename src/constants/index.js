@@ -1,4 +1,25 @@
 export const APP_NAME = "Nomany Store";
+export const SITE_DOMAIN = "nomany-vape-store.com";
+export const SITE_URL = `https://${SITE_DOMAIN}`;
+
+/**
+ * The dashboard login lives on an unlisted path — it is not in any menu and
+ * not linked from anywhere on the site.
+ *
+ * Treat this as one less thing to stumble across, not as a security control:
+ * the password is what actually protects the dashboard, and firestore.rules
+ * protects the data even if someone finds this URL.
+ *
+ * Change the value here if you ever want a different address.
+ */
+export const ADMIN_LOGIN_PATH = "/nomany-control-8821";
+
+/**
+ * Firebase Auth identifies accounts by email, but the admin signs in with a
+ * username. Usernames are mapped onto this internal domain, which is never
+ * used to send mail.
+ */
+export const ADMIN_EMAIL_DOMAIN = "nomany-admin.local";
 
 export const LOCAL_STORAGE_KEYS = {
   CART: "vapestore_cart",
@@ -15,7 +36,8 @@ export const LOCAL_STORAGE_KEYS = {
   OFFERS: "vapestore_admin_offers",
   TESTIMONIALS: "vapestore_admin_testimonials",
   HOMEPAGE: "vapestore_admin_homepage",
-  AGE_VERIFIED: "vapestore_age_verified", 
+  AGE_VERIFIED: "vapestore_age_verified",
+  SEEN_ORDERS: "vapestore_seen_orders",
 };
 
 export const SORT_OPTIONS = [

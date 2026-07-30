@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useLanguage } from "./context/LanguageContext";
+import { ADMIN_LOGIN_PATH } from "./constants";
 import CustomerLayout from "./layouts/CustomerLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import HomePage from "./pages/customer/HomePage";
@@ -14,13 +15,13 @@ const CategoryPage = lazy(() => import("./pages/customer/CategoryPage"));
 const OffersPage = lazy(() => import("./pages/customer/OffersPage"));
 const AboutPage = lazy(() => import("./pages/customer/AboutPage"));
 const ContactPage = lazy(() => import("./pages/customer/ContactPage"));
-const AuthPage = lazy(() => import("./pages/customer/AuthPage"));
-const ProfilePage = lazy(() => import("./pages/customer/ProfilePage"));
+const ReturnPolicyPage = lazy(() => import("./pages/customer/ReturnPolicyPage"));
 const CartPage = lazy(() => import("./pages/customer/CartPage"));
 const CheckoutPage = lazy(() => import("./pages/customer/CheckoutPage"));
 const WishlistPage = lazy(() => import("./pages/customer/WishlistPage"));
 const SearchPage = lazy(() => import("./pages/customer/SearchPage"));
 const NotFoundPage = lazy(() => import("./pages/customer/NotFoundPage"));
+const AdminLoginPage = lazy(() => import("./pages/customer/AdminLoginPage"));
 
 const DashboardOverview = lazy(() => import("./pages/dashboard/DashboardOverview"));
 const DashboardProducts = lazy(() => import("./pages/dashboard/DashboardProducts"));
@@ -28,10 +29,7 @@ const DashboardCategories = lazy(() => import("./pages/dashboard/DashboardCatego
 const DashboardBrands = lazy(() => import("./pages/dashboard/DashboardBrands"));
 const DashboardOffers = lazy(() => import("./pages/dashboard/DashboardOffers"));
 const DashboardOrders = lazy(() => import("./pages/dashboard/DashboardOrders"));
-const DashboardCustomers = lazy(() => import("./pages/dashboard/DashboardCustomers"));
 const DashboardAnalytics = lazy(() => import("./pages/dashboard/DashboardAnalytics"));
-const DashboardBanners = lazy(() => import("./pages/dashboard/DashboardBanners"));
-const DashboardTestimonials = lazy(() => import("./pages/dashboard/DashboardTestimonials"));
 const DashboardSettings = lazy(() => import("./pages/dashboard/DashboardSettings"));
 
 const RouteFallback = () => (
@@ -47,7 +45,7 @@ function App() {
     <div dir={dir} className="min-h-screen bg-secondary-light dark:bg-slate-950 transition-colors duration-300">
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          {/* Customer Routes */}
+          {/* Storefront — no accounts, checkout is guest-only */}
           <Route element={<CustomerLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/products" element={<ProductsPage />} />
@@ -57,17 +55,17 @@ function App() {
             <Route path="/offers" element={<OffersPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/return-policy" element={<ReturnPolicyPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
-          {/* Auth Route */}
-          <Route path="/login" element={<AuthPage />} />
+          {/* Unlisted admin sign-in. Not linked from anywhere in the UI. */}
+          <Route path={ADMIN_LOGIN_PATH} element={<AdminLoginPage />} />
 
-          {/* Dashboard Routes — DashboardLayout enforces the admin check, and
+          {/* Dashboard — DashboardLayout gates on the admin role, and
               firestore.rules enforces it again server-side. */}
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardOverview />} />
@@ -76,14 +74,10 @@ function App() {
             <Route path="brands" element={<DashboardBrands />} />
             <Route path="offers" element={<DashboardOffers />} />
             <Route path="orders" element={<DashboardOrders />} />
-            <Route path="customers" element={<DashboardCustomers />} />
             <Route path="analytics" element={<DashboardAnalytics />} />
-            <Route path="banners" element={<DashboardBanners />} />
-            <Route path="testimonials" element={<DashboardTestimonials />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>
 
-          {/* 404 */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>

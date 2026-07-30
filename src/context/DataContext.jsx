@@ -15,7 +15,6 @@ import {
   updateOrderStatusInFirebase,
   deleteOrderFromFirebase,
   subscribeToOrders,
-  subscribeToUserOrders,
   syncProductsToFirebase,
   subscribeToProducts,
   syncCategoriesToFirebase,
@@ -124,7 +123,7 @@ function useSyncedObject({ storageKey, seed, subscribe, sync, label }) {
 }
 
 export const DataProvider = ({ children }) => {
-  const { user, userRole, isLoading: authLoading } = useAuth();
+  const { userRole, isLoading: authLoading } = useAuth();
   const isAdmin = userRole === "admin";
 
   const [products, commitProducts] = useSyncedList({
@@ -195,13 +194,13 @@ export const DataProvider = ({ children }) => {
   const [ordersLoading, setOrdersLoading] = useState(true);
 
   // ========== ORDERS ==========
-  // Admins watch every order; a signed-in customer watches only their own.
-  // Subscribing to the whole collection as a customer would just collect
-  // permission-denied errors now that firestore.rules is enforced.
+  // Only the admin reads orders. There are no customer accounts, so there is
+  // nobody else with a legitimate reason to hold the collection open -- and
+  // firestore.rules denies it anyway.
   useEffect(() => {
     if (authLoading) return undefined;
 
-    if (!user) {
+    if (!isAdmin) {
       setOrders([]);
       setOrdersLoading(false);
       return undefined;
@@ -209,26 +208,23 @@ export const DataProvider = ({ children }) => {
 
     setOrdersLoading(true);
 
-    const handle = (incoming) => {
-      const valid = (incoming || []).filter(
-        (order) => order != null && typeof order === "object" && order.id != null
-      );
-      valid.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
-      setOrders(valid);
-      setOrdersLoading(false);
-    };
-
-    const fail = () => {
-      setOrders([]);
-      setOrdersLoading(false);
-    };
-
-    const unsubscribe = isAdmin
-      ? subscribeToOrders(handle, fail)
-      : subscribeToUserOrders(user.uid, handle, fail);
+    const unsubscribe = subscribeToOrders(
+      (incoming) => {
+        const valid = (incoming || []).filter(
+          (order) => order != null && typeof order === "object" && order.id != null
+        );
+        valid.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+        setOrders(valid);
+        setOrdersLoading(false);
+      },
+      () => {
+        setOrders([]);
+        setOrdersLoading(false);
+      }
+    );
 
     return () => unsubscribe();
-  }, [user, isAdmin, authLoading]);
+  }, [isAdmin, authLoading]);
 
   // ========== PRODUCTS ==========
   const addProduct = useCallback(
@@ -473,20 +469,19 @@ export const DataProvider = ({ children }) => {
         return null;
       }
 
-      const withOwner = { ...order, userId: user?.uid ?? null };
-
       try {
-        const saved = await addOrderToFirebase(withOwner);
+        const saved = await addOrderToFirebase(order);
+        // Only the admin's own session holds an orders list; a guest placing an
+        // order has nothing to update locally.
         setOrders((prev) => [saved, ...prev.filter((o) => o.id !== saved.id)]);
         return saved;
       } catch (error) {
         console.error("Failed to save order to Firebase:", error);
-        setOrders((prev) => [withOwner, ...prev]);
         toast.error("Order saved on this device only — please contact us to confirm it");
-        return withOwner;
+        return order;
       }
     },
-    [user]
+    []
   );
 
   const deleteOrder = useCallback(

@@ -8,14 +8,12 @@ import {
   Menu,
   X,
   ChevronDown,
-  User,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useScrollPosition } from "../../hooks/useScrollPosition";
 import { useTranslations } from "../../hooks/useTranslations";
-import { useAuth } from "../../context/AuthContext";
 import navigation from "../../data/navigation";
 import Logo from "../common/Logo";
 import LanguageSwitcher from "../common/LanguageSwitcher";
@@ -27,7 +25,6 @@ const Navbar = () => {
   const { wishlist } = useWishlist();
   const { isScrolled } = useScrollPosition();
   const { t } = useTranslations();
-  const { isAuthenticated } = useAuth(); // Added Auth state
   const location = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -92,25 +89,8 @@ const Navbar = () => {
                 <Search className="w-5 h-5" />
               </button>
 
-              {/* Auth Links (Desktop) */}
-              <div className="hidden sm:flex items-center gap-1">
-                {isAuthenticated ? (
-                  <Link
-                    to="/profile"
-                    className="relative p-2 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-                    aria-label="Profile"
-                  >
-                    <User className="w-5 h-5" />
-                  </Link>
-                ) : (
-                  <Link
-                    to="/login"
-                    className="px-4 py-2 rounded-xl text-sm font-medium text-primary border border-primary/20 hover:bg-primary/5 transition-colors"
-                  >
-                    {t("login")}
-                  </Link>
-                )}
-              </div>
+              {/* No account links: the store has no customer accounts and the
+                  dashboard sign-in lives on an unlisted path. */}
 
               {/* Wishlist */}
               <Link
@@ -258,15 +238,6 @@ const Navbar = () => {
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-800 space-y-3">
-                  {/* Auth Link (Mobile) */}
-                  <Link
-                    to={isAuthenticated ? "/profile" : "/login"}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800"
-                  >
-                    <User className="w-5 h-5" />
-                    {isAuthenticated ? (language === "ar" ? "الملف الشخصي" : "Profile") : (language === "ar" ? "تسجيل الدخول" : "Login")}
-                  </Link>
-
                   <Link
                     to="/cart"
                     className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800"

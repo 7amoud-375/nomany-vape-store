@@ -14,10 +14,7 @@ export const navigation = {
     { id: "brands", labelAr: "الماركات", labelEn: "Brands", path: "/dashboard/brands" },
     { id: "offers", labelAr: "العروض", labelEn: "Offers", path: "/dashboard/offers" },
     { id: "orders", labelAr: "الطلبات", labelEn: "Orders", path: "/dashboard/orders" },
-    { id: "customers", labelAr: "العملاء", labelEn: "Customers", path: "/dashboard/customers" },
     { id: "analytics", labelAr: "التحليلات", labelEn: "Analytics", path: "/dashboard/analytics" },
-    { id: "banners", labelAr: "البنرات", labelEn: "Banners", path: "/dashboard/banners" },
-    { id: "testimonials", labelAr: "آراء العملاء", labelEn: "Testimonials", path: "/dashboard/testimonials" },
     { id: "settings", labelAr: "الإعدادات", labelEn: "Settings", path: "/dashboard/settings" },
   ],
 };

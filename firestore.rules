@@ -1,84 +1,73 @@
 rules_version = '2';
 
 // ---------------------------------------------------------------------------
-// Nomany Store security rules.
+// Nomany Store — security rules.
 //
-// The dashboard's admin check lives in React (DashboardLayout), which anyone
-// can bypass with devtools. These rules are the real enforcement boundary --
-// treat the client as hostile.
+// Model: there are no customer accounts. Checkout is guest-only, and the only
+// account that exists is the admin's.
 //
-// Deploy with:  firebase deploy --only firestore:rules
+// The critical detail: nothing here trusts "is signed in" as a proxy for "is
+// admin". Email/Password sign-up stays enabled at the Firebase API level even
+// with no sign-up form on the site, so anyone can still mint an account. Admin
+// is proven by reading the user's own document and checking role == 'admin'.
+//
+// Deploy:  firebase deploy --only firestore:rules
 // ---------------------------------------------------------------------------
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     function isAdmin() {
-      return isSignedIn()
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // -- User profiles -------------------------------------------------------
-    // A customer may create and edit their own profile, but `role` is locked:
-    // it must be 'customer' on create and can never change afterwards.
-    // Promote an admin by hand in the Firebase console.
+    // -- Admin accounts ------------------------------------------------------
+    // Readable and writable by nobody through the client. The admin document is
+    // created by hand in the Firebase console; leaving any write path open here
+    // is exactly how a customer promotes themselves to admin.
+    //
+    // Read is limited to the signed-in user's OWN document because the app has
+    // to look up its own role after login.
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-
-      allow create: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role == 'customer';
-
-      allow update: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role == resource.data.role;
-
-      allow delete: if false;
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if false;
+      allow write: if false;
     }
 
     // -- Storefront catalogue ------------------------------------------------
-    // Public read (it is a shop), admin-only write. Without this, any visitor
-    // could overwrite the entire product catalogue in a single request.
-    match /store/{document} {
+    // Public read (it is a shop). Admin-only write.
+    match /store/{document=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
     // -- Orders --------------------------------------------------------------
-    // A customer may place an order and read back their own. Only an admin can
-    // list every order or change status. Nobody may rewrite an order's totals
-    // after the fact, and `status` is admin-only so a customer cannot mark
-    // their own order paid.
+    // Guests place orders, so create is open — but constrained: an order may
+    // only be created in an unpaid state, so nobody can submit one already
+    // marked paid. Reading the collection is admin-only; without that, one
+    // signed-in user could dump every customer's name, phone and address.
     match /orders/{orderId} {
-      allow read: if isAdmin()
-        || (isSignedIn() && resource.data.userId == request.auth.uid);
-
       allow create: if request.resource.data.status in ['pending', 'awaiting_payment'];
-
-      allow update, delete: if isAdmin();
+      allow read, update, delete: if isAdmin();
     }
 
     // -- "Notify me when back in stock" --------------------------------------
-    // Anyone may register interest; only admins can read the contact list or
-    // mark requests as sent.
-    match /stockNotifications/{requestId} {
+    match /stockNotifications/{docId} {
       allow create: if request.resource.data.notified == false;
       allow read, update, delete: if isAdmin();
     }
 
     // -- Server-verified payments -------------------------------------------
-    // Written only by api/callback.php via the Admin REST path, never by the
-    // browser. Denying client access here is what stops a forged "paid".
+    // Written only by the payment callback using a service account. Denying the
+    // browser entirely is what makes a "paid" status trustworthy.
     match /payments/{paymentId} {
       allow read: if isAdmin();
       allow write: if false;
     }
 
-    // Anything not matched above is denied.
+    // Deny everything not matched above.
     match /{document=**} {
       allow read, write: if false;
     }
