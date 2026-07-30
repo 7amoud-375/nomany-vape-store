@@ -46,7 +46,6 @@ export const SORT_OPTIONS = [
   { id: "price-low", labelAr: "السعر: من الأقل", labelEn: "Price: Low to High" },
   { id: "price-high", labelAr: "السعر: من الأعلى", labelEn: "Price: High to Low" },
   { id: "best-selling", labelAr: "الأكثر مبيعاً", labelEn: "Best Selling" },
-  { id: "highest-rated", labelAr: "الأعلى تقييماً", labelEn: "Highest Rated" },
   { id: "alphabetical", labelAr: "أبجدياً", labelEn: "Alphabetically" },
 ];
 

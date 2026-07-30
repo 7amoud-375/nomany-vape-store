@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Pencil, Trash2, Copy, Eye, ImageIcon, Bell, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Bell, Search } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
@@ -8,206 +8,9 @@ import { formatPrice, effectivePrice, productImage } from "../../utils";
 import { CardGrid, AdminCard } from "../../components/dashboard/AdminCardGrid";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
-import MultiImageUploader from "../../components/dashboard/MultiImageUploader";
+import ProductForm from "../../components/dashboard/ProductForm";
 import GalleryPicker from "../../components/dashboard/GalleryPicker";
 
-// 1. ProductForm stays outside
-const ProductForm = ({ formData, setFormData, language, t, brands, categories, handleSave, onCancel, openGallery }) => (
-  <form onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-    <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800">
-      <div>
-        <span className="text-sm font-bold text-gray-800 dark:text-white">
-          {language === "ar" ? "حالة التوفر" : "Availability"}
-        </span>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formData.availability 
-            ? (language === "ar" ? "المنتج متاح للبيع" : "Product is available for sale") 
-            : (language === "ar" ? "المنتج غير متاح" : "Product is unavailable")}
-        </p>
-      </div>
-      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
-        <input 
-          type="checkbox" 
-          checked={formData.availability} 
-          onChange={(e) => setFormData((p) => ({ ...p, availability: e.target.checked }))} 
-          className="sr-only peer" 
-        />
-        <div className="w-12 h-7 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-500 peer-checked:bg-green-500"></div>
-      </label>
-    </div>
-
-    <div className="space-y-2">
-      <MultiImageUploader
-        images={formData.images}
-        onChange={(images) => setFormData((p) => ({ ...p, images }))}
-        language={language}
-      />
-      <button
-        type="button"
-        onClick={openGallery}
-        className="flex items-center gap-2 text-sm text-primary hover:underline"
-      >
-        <ImageIcon className="w-4 h-4" />
-        {language === "ar" ? "اختيار من المعرض" : "Choose from Gallery"}
-      </button>
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">
-          {language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}
-        </label>
-        <input
-          required
-          value={formData.nameAr}
-          onChange={(e) => setFormData((p) => ({ ...p, nameAr: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">
-          {language === "ar" ? "الاسم (English)" : "Name (English)"}
-        </label>
-        <input
-          required
-          value={formData.nameEn}
-          onChange={(e) => setFormData((p) => ({ ...p, nameEn: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-    </div>
-
-    <div>
-      <label className="block text-sm font-medium mb-1">
-        {language === "ar" ? "الوصف (عربي)" : "Description (Arabic)"}
-      </label>
-      <textarea
-        value={formData.descriptionAr}
-        onChange={(e) => setFormData((p) => ({ ...p, descriptionAr: e.target.value }))}
-        className="input-field resize-none"
-        rows={2}
-      />
-    </div>
-    <div>
-      <label className="block text-sm font-medium mb-1">
-        {language === "ar" ? "الوصف (English)" : "Description (English)"}
-      </label>
-      <textarea
-        value={formData.descriptionEn}
-        onChange={(e) => setFormData((p) => ({ ...p, descriptionEn: e.target.value }))}
-        className="input-field resize-none"
-        rows={2}
-      />
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">{t("brand")}</label>
-        <select
-          value={formData.brand}
-          onChange={(e) => setFormData((p) => ({ ...p, brand: e.target.value }))}
-          className="input-field"
-        >
-          {brands.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">{t("category")}</label>
-        <select
-          value={formData.category}
-          onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
-          className="input-field"
-        >
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {language === "ar" ? c.nameAr : c.nameEn}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">SKU</label>
-        <input
-          value={formData.sku}
-          onChange={(e) => setFormData((p) => ({ ...p, sku: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">{t("price")}</label>
-        <input
-          type="number"
-          required
-          value={formData.price}
-          onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">{t("discountPrice")}</label>
-        <input
-          type="number"
-          value={formData.discountPrice || ""}
-          onChange={(e) => setFormData((p) => ({ ...p, discountPrice: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">{t("rating")}</label>
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          max="5"
-          value={formData.rating}
-          onChange={(e) => setFormData((p) => ({ ...p, rating: e.target.value }))}
-          className="input-field"
-        />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-2 gap-4">
-      {[
-        { key: "featured", label: language === "ar" ? "مميز" : "Featured" },
-        { key: "bestSeller", label: language === "ar" ? "الأكثر مبيعاً" : "Best Seller" },
-        { key: "offer", label: language === "ar" ? "عرض" : "Offer" },
-        { key: "newArrival", label: language === "ar" ? "جديد" : "New Arrival" },
-      ].map(({ key, label }) => (
-        <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800">
-          <input
-            type="checkbox"
-            checked={formData[key]}
-            onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.checked }))}
-            className="rounded text-primary w-4 h-4"
-          />
-          <span className="text-sm">{label}</span>
-        </label>
-      ))}
-    </div>
-
-    <div className="flex gap-3 pt-4">
-      <Button type="submit" className="flex-1">
-        {t("save")}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onCancel}
-      >
-        {t("cancel")}
-      </Button>
-    </div>
-  </form>
-);
-
-// 2. Main Dashboard Component
 const DashboardProducts = () => {
   const { language } = useLanguage();
   const { products, categories, brands, addProduct, updateProduct, deleteProduct, duplicateProduct, fetchStockAlerts, resolveStockAlerts } = useData();
@@ -234,9 +37,7 @@ const DashboardProducts = () => {
     price: "",
     discountPrice: "",
     sku: "",
-    images: [""],
-    rating: 0,
-    reviewsCount: 0,
+    images: [],
     availability: true,
     featured: false,
     bestSeller: false,
@@ -275,8 +76,8 @@ const DashboardProducts = () => {
       ...formData,
       price: Number(formData.price),
       discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
-      rating: Number(formData.rating) || 0,
-      reviewsCount: Number(formData.reviewsCount) || 0,
+      // Blank slots would render as broken thumbnails on the storefront.
+      images: (formData.images || []).filter((src) => typeof src === "string" && src.trim() !== ""),
     };
     if (addModal) {
       addProduct(data);
@@ -293,7 +94,7 @@ const DashboardProducts = () => {
   };
 
   const handleGallerySelect = (imageSrc) => {
-    setFormData((p) => ({ ...p, images: [imageSrc] }));
+    setFormData((p) => ({ ...p, images: [...(p.images || []).filter(Boolean), imageSrc] }));
   };
 
   const openAlertsModal = async (product) => {
@@ -394,7 +195,7 @@ const DashboardProducts = () => {
           brands={brands} 
           categories={categories} 
           handleSave={handleSave} 
-          onCancel={() => setAddModal(false)} 
+          onCancel={() => setAddModal(false)} isEdit={false} 
           openGallery={openGallery} 
         />
       </Modal>
@@ -408,7 +209,7 @@ const DashboardProducts = () => {
           brands={brands} 
           categories={categories} 
           handleSave={handleSave} 
-          onCancel={() => setEditModal({ open: false, product: null })} 
+          onCancel={() => setEditModal({ open: false, product: null })} isEdit 
           openGallery={openGallery} 
         />
       </Modal>

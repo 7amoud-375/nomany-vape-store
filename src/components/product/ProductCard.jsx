@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Heart, ShoppingCart, Eye, Star } from "lucide-react";
+import { Heart, ShoppingCart, Eye } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -119,13 +119,6 @@ const ProductCard = ({ product, index = 0 }) => {
                 {name}
               </h3>
 
-              {/* Rating */}
-              <div className="flex items-center gap-1 mb-2">
-                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{product.rating}</span>
-                <span className="text-xs text-gray-400">({product.reviewsCount})</span>
-              </div>
-
               {/* Price */}
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-primary">{formatPrice(price, language)}</span>
@@ -154,14 +147,6 @@ const ProductCard = ({ product, index = 0 }) => {
           <div className="flex flex-col">
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{product.brand}</p>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{name}</h2>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex items-center gap-1">
-                <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                <span className="font-medium">{product.rating}</span>
-              </div>
-              <span className="text-gray-400">|</span>
-              <span className="text-gray-500">{product.reviewsCount} {t("reviews")}</span>
-            </div>
             <div className="flex items-center gap-3 mb-4">
               <span className="text-2xl font-bold text-primary">{formatPrice(price, language)}</span>
               {discount > 0 && (

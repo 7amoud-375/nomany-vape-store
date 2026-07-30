@@ -15,8 +15,10 @@ const CategoryPage = () => {
   const { products } = useProducts();
   const { t } = useTranslations();
 
-  const category = categories.find((c) => c.id === id);
-  const categoryProducts = products.filter((p) => p.category === id);
+  // Same string-vs-number trap as products: a category added from the
+  // dashboard gets a generated string id, the seed ones are plain slugs.
+  const category = categories.find((c) => String(c.id) === String(id));
+  const categoryProducts = products.filter((p) => String(p.category) === String(id));
 
   if (!category) {
     return (

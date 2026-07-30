@@ -140,10 +140,6 @@ export const filterProducts = (products, filters) => {
     result = result.filter((p) => p.offer || p.discountPrice);
   }
 
-  if (filters.rating) {
-    result = result.filter((p) => toNumber(p.rating) >= toNumber(filters.rating));
-  }
-
   return result;
 };
 
@@ -170,8 +166,6 @@ export const sortProducts = (products, sortBy) => {
       return sorted.sort((a, b) => effectivePrice(b) - effectivePrice(a));
     case "best-selling":
       return sorted.sort((a, b) => toNumber(b.reviewsCount) - toNumber(a.reviewsCount));
-    case "highest-rated":
-      return sorted.sort((a, b) => toNumber(b.rating) - toNumber(a.rating));
     case "alphabetical":
       return sorted.sort((a, b) => String(a.nameEn ?? "").localeCompare(String(b.nameEn ?? "")));
     default:

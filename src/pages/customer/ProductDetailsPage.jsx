@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Heart, ShoppingCart, Star, Minus, Plus, ChevronRight, Truck, Shield, RotateCcw, BellRing, Loader2, Maximize2 } from "lucide-react";
+import { Heart, ShoppingCart, Minus, Plus, ChevronRight, Truck, Shield, RotateCcw, BellRing, Loader2, Maximize2 } from "lucide-react";
 import ImageLightbox from "../../components/product/ImageLightbox";
 
 const PLACEHOLDER = "https://placehold.co/600x600/004741/FFFFFF?text=%20";
@@ -153,13 +153,6 @@ const ProductDetailsPage = () => {
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">{name}</h1>
 
             <div className="flex items-center gap-4 mb-6">
-              <div className="flex items-center gap-1">
-                <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                <span className="font-semibold text-lg">{product.rating}</span>
-              </div>
-              <span className="text-gray-300">|</span>
-              <span className="text-gray-500 dark:text-gray-400">{product.reviewsCount} {t("reviews")}</span>
-              <span className="text-gray-300">|</span>
               <Badge variant={product.availability ? "success" : "danger"}>
                 {product.availability ? t("inStock") : t("outOfStock")}
               </Badge>

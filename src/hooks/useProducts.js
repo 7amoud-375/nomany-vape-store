@@ -24,13 +24,21 @@ export const useProducts = () => {
     [products]
   );
 
-  const getProductById = (id) => products.find((p) => p.id === Number(id));
+  /**
+   * Ids are compared as strings on both sides.
+   *
+   * This used to coerce with Number(), which worked only for the original seed
+   * products (1..16). Anything added from the dashboard gets a generated id
+   * like "m4x8z2ka9f", and Number() turns that into NaN — so every new product
+   * opened to "No products found".
+   */
+  const getProductById = (id) =>
+    products.find((p) => String(p.id) === String(id));
 
-  const getRelatedProducts = (productId, category, limit = 4) => {
-    return products
-      .filter((p) => p.id !== productId && p.category === category)
+  const getRelatedProducts = (productId, category, limit = 4) =>
+    products
+      .filter((p) => String(p.id) !== String(productId) && p.category === category)
       .slice(0, limit);
-  };
 
   return {
     products,

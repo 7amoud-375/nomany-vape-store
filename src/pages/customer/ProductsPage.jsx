@@ -92,20 +92,6 @@ const FilterContent = ({
       </div>
     </div>
 
-    {/* Rating */}
-    <div>
-      <h4 className="font-semibold text-gray-900 dark:text-white mb-3">{t("rating")}</h4>
-      <select
-        value={filters.rating}
-        onChange={(e) => setFilters((p) => ({ ...p, rating: e.target.value }))}
-        className="input-field text-sm"
-      >
-        <option value="">{t("all")}</option>
-        <option value="4">4+ {t("stars")}</option>
-        <option value="4.5">4.5+ {t("stars")}</option>
-      </select>
-    </div>
-
     {/* Offers */}
     <label className="flex items-center gap-2 cursor-pointer">
       <input
@@ -139,7 +125,6 @@ const ProductsPage = () => {
     brand: "all",
     minPrice: "",
     maxPrice: "",
-    rating: "",
     offer: false,
   });
   const [sortBy, setSortBy] = useState("newest");
@@ -153,7 +138,6 @@ const ProductsPage = () => {
       brand: filters.brand === "all" ? undefined : filters.brand,
       minPrice: filters.minPrice ? Number(filters.minPrice) : undefined,
       maxPrice: filters.maxPrice ? Number(filters.maxPrice) : undefined,
-      rating: filters.rating ? Number(filters.rating) : undefined,
       offer: filters.offer || undefined,
     });
     return sortProducts(result, sortBy);
@@ -165,7 +149,6 @@ const ProductsPage = () => {
       brand: "all",
       minPrice: "",
       maxPrice: "",
-      rating: "",
       offer: false,
     });
   };
@@ -175,7 +158,6 @@ const ProductsPage = () => {
     filters.brand !== "all" ||
     filters.minPrice ||
     filters.maxPrice ||
-    filters.rating ||
     filters.offer;
 
   return (
