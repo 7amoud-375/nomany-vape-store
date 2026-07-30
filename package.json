@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "package": "powershell -ExecutionPolicy Bypass -File scripts/package.ps1"
+    "package": "powershell -ExecutionPolicy Bypass -File scripts/package.ps1",
+    "deploy": "npm run build && node scripts/deploy.mjs"
   },
   "dependencies": {
     "firebase": "^12.16.0",
@@ -24,6 +25,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "basic-ftp": "^6.0.2",
     "tailwindcss": "^4.0.0",
     "vite": "^6.0.3"
   }

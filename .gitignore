@@ -47,3 +47,6 @@ Thumbs.db
 # Generated upload package
 nomany-deploy.zip
 build-package/
+
+# FTP deploy credentials
+.env.deploy
