@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { Heart, ShoppingBag } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -36,7 +37,8 @@ const WishlistPage = () => {
   }
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="rings" position="top-end" size="w-72 h-72" tone="text-accent" />
       <div className="container-custom">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">{t("wishlist")}</h1>
 

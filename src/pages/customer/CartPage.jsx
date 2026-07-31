@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -43,7 +44,8 @@ const CartPage = () => {
   }
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="dots" position="top-end" size="w-72 h-72" tone="text-primary" />
       <div className="container-custom">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">{t("yourCart")}</h1>
 

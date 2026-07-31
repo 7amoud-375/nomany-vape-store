@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { MapPin, Phone, Mail, Clock, Send, MessageSquare } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -26,7 +27,8 @@ const ContactPage = () => {
   };
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="arcs" position="bottom-end" size="w-72 h-72" tone="text-primary" />
       <div className="container-custom">
         <SectionTitle
           title={t("contactUs")}

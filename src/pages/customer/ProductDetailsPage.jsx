@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Heart, ShoppingCart, Minus, Plus, ChevronRight, Truck, Shield, RotateCcw, BellRing, Loader2, Maximize2 } from "lucide-react";
@@ -82,7 +83,8 @@ const ProductDetailsPage = () => {
   };
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="vapour" position="top-end" size="w-72 h-96" tone="text-primary" />
       <div className="container-custom">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-8">

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import SectionDecoration from "../common/SectionDecoration";
 import { ShieldCheck, Truck, Tag, Headphones } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
@@ -20,7 +21,8 @@ const WhyChooseUs = () => {
   if (!homepage.whyChooseUs.enabled) return null;
 
   return (
-    <section className="py-20 bg-white dark:bg-slate-900">
+    <section className="relative overflow-hidden py-20 bg-white dark:bg-slate-900">
+      <SectionDecoration variant="rings" position="bottom-end" size="w-72 h-72" tone="text-primary" />
       <div className="container-custom">
         <SectionTitle
           title={language === "ar" ? homepage.whyChooseUs.titleAr : homepage.whyChooseUs.titleEn}

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../common/SectionDecoration";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -19,7 +20,8 @@ const FeaturedProducts = () => {
   const products = featuredProducts.slice(0, homepage.featuredProducts.limit);
 
   return (
-    <section className="py-20 bg-white dark:bg-slate-900">
+    <section className="relative overflow-hidden py-20 bg-white dark:bg-slate-900">
+      <SectionDecoration variant="dots" position="top-end" size="w-80 h-80" tone="text-primary" />
       <div className="container-custom">
         <div className="flex items-end justify-between mb-12">
           <div className="text-left">

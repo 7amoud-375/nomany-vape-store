@@ -3,7 +3,6 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import DataTable from "../../components/dashboard/DataTable";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import ImageUploader from "../../components/dashboard/ImageUploader";
@@ -34,7 +33,7 @@ const BrandForm = ({ formData, setFormData, language, handleSave, onCancel, t })
 
 const DashboardBrands = () => {
   const { language } = useLanguage();
-  const { brands, addBrand, updateBrand, deleteBrand } = useData();
+  const { brands, products, addBrand, updateBrand, deleteBrand } = useData();
   const { t } = useTranslations();
 
   const [deleteModal, setDeleteModal] = useState({ open: false, brand: null });
@@ -62,33 +61,6 @@ const DashboardBrands = () => {
     setFormData(emptyBrand);
   };
 
-  const columns = [
-    {
-      key: "logo",
-      label: "",
-      render: (item) => {
-        const initial = item?.name?.charAt(0)?.toUpperCase() || "B";
-        return (
-          <div className="w-10 h-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-            <span className="text-lg font-bold text-primary">{initial}</span>
-          </div>
-        );
-      },
-    },
-    { key: "name", label: t("brand") },
-  ];
-
-  const actions = (row) => (
-    <>
-      <button onClick={() => { setFormData({ ...row }); setEditModal({ open: true, brand: row }); }} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-blue-500">
-        <Pencil className="w-4 h-4" />
-      </button>
-      <button onClick={() => setDeleteModal({ open: true, brand: row })} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500">
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </>
-  );
-
   return (
     <div>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
@@ -106,8 +78,45 @@ const DashboardBrands = () => {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <DataTable columns={columns} data={brands} actions={actions} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        {(brands || []).length === 0 ? (
+          <p className="col-span-full card p-12 text-center text-gray-500 dark:text-gray-400">
+            {language === "ar" ? "لسه مفيش ماركات" : "No brands yet"}
+          </p>
+        ) : (
+          (brands || []).map((brand) => (
+            <div key={brand.id} className="card p-4 flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0">
+                <span className="text-lg font-bold text-primary">
+                  {brand?.name?.charAt(0)?.toUpperCase() || "B"}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate w-full">
+                {brand.name}
+              </p>
+              <p className="text-xs text-gray-400">
+                {products.filter((p) => String(p.brand) === String(brand.id)).length}{" "}
+                {language === "ar" ? "منتج" : "products"}
+              </p>
+              <div className="flex items-center gap-1 w-full pt-2 border-t border-gray-100 dark:border-slate-800">
+                <button
+                  onClick={() => { setFormData({ ...brand }); setEditModal({ open: true, brand }); }}
+                  className="flex-1 py-1.5 rounded-lg text-primary hover:bg-primary/5 transition-colors flex items-center justify-center"
+                  title={language === "ar" ? "تعديل" : "Edit"}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setDeleteModal({ open: true, brand })}
+                  className="flex-1 py-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center"
+                  title={language === "ar" ? "حذف" : "Delete"}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <Modal isOpen={addModal} onClose={handleClose} title={language === "ar" ? "إضافة ماركة" : "Add Brand"} size="md">

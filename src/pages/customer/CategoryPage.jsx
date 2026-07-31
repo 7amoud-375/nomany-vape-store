@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -30,7 +31,8 @@ const CategoryPage = () => {
   }
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="arcs" position="top-end" size="w-72 h-72" tone="text-primary" />
       <div className="container-custom">
         <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-8">
           <Link to="/" className="hover:text-primary">{language === "ar" ? "الرئيسية" : "Home"}</Link>

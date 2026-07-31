@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { ShieldCheck, Truck, Headphones, Award } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
@@ -42,7 +43,9 @@ const AboutPage = () => {
   ];
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="vapour" position="bottom-end" size="w-64 h-96" tone="text-primary" />
+      <SectionDecoration variant="rings" position="top-start" size="w-64 h-64" tone="text-accent" />
       <div className="container-custom">
         <SectionTitle
           title={language === "ar" ? "من نحن" : "About Us"}

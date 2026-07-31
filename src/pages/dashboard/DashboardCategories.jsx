@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import DataTable from "../../components/dashboard/DataTable";
+import { CardGrid, AdminCard } from "../../components/dashboard/AdminCardGrid";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import ImageUploader from "../../components/dashboard/ImageUploader";
@@ -40,7 +40,7 @@ const CategoryForm = ({ formData, setFormData, language, handleSave, onCancel, t
 
 const DashboardCategories = () => {
   const { language } = useLanguage();
-  const { categories, addCategory, updateCategory, deleteCategory } = useData();
+  const { categories, products, addCategory, updateCategory, deleteCategory } = useData();
   const { t } = useTranslations();
 
   const [deleteModal, setDeleteModal] = useState({ open: false, category: null });
@@ -68,31 +68,6 @@ const DashboardCategories = () => {
     setFormData(emptyCategory);
   };
 
-  const columns = [
-    {
-      key: "image",
-      label: "",
-      render: (item) => (
-        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700">
-          <img src={item?.image} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = "https://placehold.co/100x100/004741/FFFFFF?text=C"; }} />
-        </div>
-      ),
-    },
-    { key: language === "ar" ? "nameAr" : "nameEn", label: t("category") },
-    { key: "productCount", label: language === "ar" ? "عدد المنتجات" : "Products" },
-    { key: "order", label: language === "ar" ? "الترتيب" : "Order" },
-  ];
-
-  const actions = (row) => (
-    <>
-      <button onClick={() => { setFormData({ ...row }); setEditModal({ open: true, category: row }); }} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-blue-500">
-        <Pencil className="w-4 h-4" />
-      </button>
-      <button onClick={() => setDeleteModal({ open: true, category: row })} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500">
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </>
-  );
 
   return (
     <div>
@@ -111,9 +86,26 @@ const DashboardCategories = () => {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <DataTable columns={columns} data={categories} actions={actions} />
-      </div>
+      <CardGrid
+        isEmpty={(categories || []).length === 0}
+        empty={language === "ar" ? "لسه مفيش أقسام" : "No categories yet"}
+      >
+        {(categories || []).map((category, index) => (
+          <AdminCard
+            key={category.id}
+            index={index}
+            image={category.image}
+            title={language === "ar" ? category.nameAr : category.nameEn}
+            subtitle={`${products.filter((pr) => String(pr.category) === String(category.id)).length} ${
+              language === "ar" ? "منتج" : "products"
+            }`}
+            actions={[
+              { icon: Pencil, label: "Edit", tone: "primary", onClick: () => { setFormData({ ...category }); setEditModal({ open: true, category }); } },
+              { icon: Trash2, label: "Delete", tone: "danger", onClick: () => setDeleteModal({ open: true, category }) },
+            ]}
+          />
+        ))}
+      </CardGrid>
 
       <Modal isOpen={addModal} onClose={handleClose} title={language === "ar" ? "إضافة قسم" : "Add Category"} size="md">
         <CategoryForm formData={formData} setFormData={setFormData} language={language} handleSave={handleSave} onCancel={handleClose} t={t} isAdd={true} />

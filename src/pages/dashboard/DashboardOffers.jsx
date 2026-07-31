@@ -4,84 +4,10 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
 import { formatDate } from "../../utils";
-import DataTable from "../../components/dashboard/DataTable";
+import { CardGrid, AdminCard } from "../../components/dashboard/AdminCardGrid";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
-import ImageUploader from "../../components/dashboard/ImageUploader";
-
-const OfferForm = ({ formData, setFormData, language, handleSave, onCancel, t, products }) => {
-  const toggleProduct = (productId) => {
-    setFormData(p => ({
-      ...p,
-      products: p.products.includes(productId)
-        ? p.products.filter(id => id !== productId)
-        : [...p.products, productId]
-    }));
-  };
-
-  return (
-    <form onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">{language === "ar" ? "العنوان (عربي)" : "Title (Arabic)"}</label>
-          <input required value={formData.titleAr} onChange={(e) => setFormData(p => ({ ...p, titleAr: e.target.value }))} className="input-field" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{language === "ar" ? "العنوان (English)" : "Title (English)"}</label>
-          <input required value={formData.titleEn} onChange={(e) => setFormData(p => ({ ...p, titleEn: e.target.value }))} className="input-field" />
-        </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">{language === "ar" ? "الوصف (عربي)" : "Description (Arabic)"}</label>
-        <input value={formData.descriptionAr} onChange={(e) => setFormData(p => ({ ...p, descriptionAr: e.target.value }))} className="input-field" />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">{language === "ar" ? "الوصف (English)" : "Description (English)"}</label>
-        <input value={formData.descriptionEn} onChange={(e) => setFormData(p => ({ ...p, descriptionEn: e.target.value }))} className="input-field" />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">{language === "ar" ? "نسبة الخصم" : "Discount %"}</label>
-          <input type="number" required value={formData.discountPercentage} onChange={(e) => setFormData(p => ({ ...p, discountPercentage: e.target.value }))} className="input-field" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{language === "ar" ? "تاريخ البدء" : "Start Date"}</label>
-          <input type="date" value={formData.startDate} onChange={(e) => setFormData(p => ({ ...p, startDate: e.target.value }))} className="input-field" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{language === "ar" ? "تاريخ الانتهاء" : "End Date"}</label>
-          <input type="date" value={formData.endDate} onChange={(e) => setFormData(p => ({ ...p, endDate: e.target.value }))} className="input-field" />
-        </div>
-      </div>
-
-      <ImageUploader
-        value={formData.image}
-        onChange={(img) => setFormData(p => ({ ...p, image: img }))}
-        label={language === "ar" ? "صورة العرض" : "Offer Image"}
-      />
-
-      <div>
-        <label className="block text-sm font-medium mb-2">{language === "ar" ? "المنتجات المشمولة" : "Included Products"}</label>
-        <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-slate-600 rounded-xl p-3 space-y-2">
-          {products.map(p => (
-            <label key={p.id} className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={formData.products.includes(p.id)} onChange={() => toggleProduct(p.id)} className="rounded text-primary" />
-              <span className="text-sm">{language === "ar" ? p.nameAr : p.nameEn}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={formData.active} onChange={(e) => setFormData(p => ({ ...p, active: e.target.checked }))} className="rounded text-primary" />
-        <span className="text-sm">{language === "ar" ? "نشط" : "Active"}</span>
-      </label>
-      <div className="flex gap-3 pt-4">
-        <Button type="submit" className="flex-1">{t("save")}</Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>{t("cancel")}</Button>
-      </div>
-    </form>
-  );
-};
+import OfferForm from "../../components/dashboard/OfferForm";
 
 const DashboardOffers = () => {
   const { language } = useLanguage();
@@ -129,50 +55,6 @@ const DashboardOffers = () => {
     setFormData(emptyOffer);
   };
 
-  const columns = [
-    {
-      key: "image",
-      label: "",
-      render: (item) => {
-        const discount = item?.discountPercentage ?? 0;
-        return (
-          <div className="w-10 h-10 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-            <span className="text-sm font-bold text-red-500">-{discount}%</span>
-          </div>
-        );
-      },
-    },
-    { key: language === "ar" ? "titleAr" : "titleEn", label: language === "ar" ? "العنوان" : "Title" },
-    { 
-      key: "discountPercentage", 
-      label: language === "ar" ? "الخصم" : "Discount", 
-      render: (item) => {
-        const discount = item?.discountPercentage ?? 0;
-        return `-${discount}%`;
-      } 
-    },
-    {
-      key: "active",
-      label: language === "ar" ? "الحالة" : "Status",
-      render: (item) => (
-        <span className={`px-2 py-1 rounded-lg text-xs font-medium ${item?.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>
-          {item?.active ? (language === "ar" ? "نشط" : "Active") : (language === "ar" ? "غير نشط" : "Inactive")}
-        </span>
-      ),
-    },
-    { key: "endDate", label: language === "ar" ? "تاريخ الانتهاء" : "End Date", render: (item) => formatDate(item?.endDate, language) },
-  ];
-
-  const actions = (row) => (
-    <>
-      <button onClick={() => { setFormData({ ...row, products: [...row.products] }); setEditModal({ open: true, offer: row }); }} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-blue-500">
-        <Pencil className="w-4 h-4" />
-      </button>
-      <button onClick={() => setDeleteModal({ open: true, offer: row })} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500">
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </>
-  );
 
   const activeOffers = offers?.filter(o => o.active).length || 0;
   const expiredOffers = offers?.filter(o => o.endDate && new Date(o.endDate) < new Date()).length || 0;
@@ -202,9 +84,64 @@ const DashboardOffers = () => {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <DataTable columns={columns} data={offers} actions={actions} />
-      </div>
+      <CardGrid
+        isEmpty={(offers || []).length === 0}
+        empty={language === "ar" ? "لسه مفيش عروض" : "No offers yet"}
+      >
+        {(offers || []).map((offer, index) => {
+          const discount = offer?.discountPercentage ?? 0;
+          const expired = offer?.endDate && new Date(offer.endDate) < new Date();
+          const count = (offer?.products || []).length;
+
+          return (
+            <AdminCard
+              key={offer.id}
+              index={index}
+              title={language === "ar" ? offer?.titleAr : offer?.titleEn}
+              subtitle={
+                count
+                  ? `${count} ${language === "ar" ? "منتج" : "products"}`
+                  : language === "ar" ? "كل المنتجات" : "All products"
+              }
+              meta={
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-lg font-bold text-red-500">-{discount}%</span>
+                  <span className={`px-2 py-1 rounded-lg text-[11px] font-medium ${
+                    expired
+                      ? "bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-gray-400"
+                      : offer?.active
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                      : "bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-gray-400"
+                  }`}>
+                    {expired
+                      ? language === "ar" ? "منتهي" : "Expired"
+                      : offer?.active
+                      ? language === "ar" ? "نشط" : "Active"
+                      : language === "ar" ? "متوقف" : "Paused"}
+                  </span>
+                </div>
+              }
+              actions={[
+                {
+                  icon: Pencil,
+                  label: t("edit") || "Edit",
+                  tone: "primary",
+                  onClick: () => {
+                    setFormData({ ...offer, products: [...(offer.products || [])] });
+                    setEditModal({ open: true, offer });
+                  },
+                },
+                {
+                  icon: Trash2,
+                  label: t("delete") || "Delete",
+                  tone: "danger",
+                  onClick: () => setDeleteModal({ open: true, offer }),
+                },
+              ]}
+            />
+          );
+        })}
+      </CardGrid>
 
       <Modal isOpen={addModal} onClose={handleClose} title={language === "ar" ? "إضافة عرض" : "Add Offer"} size="lg">
         <OfferForm formData={formData} setFormData={setFormData} language={language} handleSave={handleSave} onCancel={handleClose} t={t} products={products} />

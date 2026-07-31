@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../common/SectionDecoration";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -14,7 +15,8 @@ const FeaturedCategories = () => {
   if (!homepage.featuredCategories.enabled) return null;
 
   return (
-    <section className="py-20">
+    <section className="relative overflow-hidden py-20">
+      <SectionDecoration variant="arcs" position="bottom-start" size="w-72 h-72" tone="text-primary" />
       <div className="container-custom">
         <SectionTitle
           title={language === "ar" ? homepage.featuredCategories.titleAr : homepage.featuredCategories.titleEn}

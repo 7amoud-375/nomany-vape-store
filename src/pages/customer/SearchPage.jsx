@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, X, PackageSearch, Layers } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -44,7 +45,8 @@ const SearchPage = () => {
   const totalResults = productResults.length + categoryResults.length;
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="hatch" position="top-end" size="w-64 h-64" tone="text-primary" />
       <div className="container-custom">
         <SectionTitle
           title={t("search")}

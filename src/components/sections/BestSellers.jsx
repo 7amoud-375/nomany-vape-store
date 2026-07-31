@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../common/SectionDecoration";
 import { ArrowRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
@@ -18,7 +19,8 @@ const BestSellers = () => {
   const products = bestSellers.slice(0, homepage.bestSellers.limit);
 
   return (
-    <section className="py-20">
+    <section className="relative overflow-hidden py-20">
+      <SectionDecoration variant="tag" position="top-start" size="w-56 h-56" tone="text-accent" />
       <div className="container-custom">
         <div className="flex items-end justify-between mb-12">
           <div>

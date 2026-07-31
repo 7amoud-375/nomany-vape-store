@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { Percent, Clock } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
@@ -15,7 +16,9 @@ const OffersPage = () => {
   const { t } = useTranslations();
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="tag" position="top-end" size="w-72 h-72" tone="text-accent" />
+      <SectionDecoration variant="tag" position="bottom-start" size="w-52 h-52" tone="text-accent" />
       <div className="container-custom">
         <SectionTitle
           title={t("offers")}

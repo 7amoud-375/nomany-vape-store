@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SectionDecoration from "../common/SectionDecoration";
 import { motion } from "framer-motion";
 import { Mail, Send } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -22,7 +23,8 @@ const Newsletter = () => {
   };
 
   return (
-    <section className="py-20">
+    <section className="relative overflow-hidden py-20">
+      <SectionDecoration variant="hatch" position="top-end" size="w-64 h-64" tone="text-accent" />
       <div className="container-custom">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

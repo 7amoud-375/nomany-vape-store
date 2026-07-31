@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
@@ -12,7 +13,9 @@ const CategoriesPage = () => {
   const { t } = useTranslations();
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="arcs" position="bottom-start" size="w-80 h-80" tone="text-primary" />
+      <SectionDecoration variant="rings" position="top-end" size="w-64 h-64" tone="text-accent" />
       <div className="container-custom">
         <SectionTitle
           title={t("categories")}

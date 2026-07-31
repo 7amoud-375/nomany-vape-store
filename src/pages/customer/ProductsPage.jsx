@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { SlidersHorizontal, Grid3X3, LayoutList, X } from "lucide-react";
@@ -161,7 +162,9 @@ const ProductsPage = () => {
     filters.offer;
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="dots" position="top-end" size="w-80 h-80" tone="text-primary" />
+      <SectionDecoration variant="hatch" position="bottom-start" size="w-64 h-64" tone="text-accent" />
       <div className="container-custom">
         <SectionTitle
           title={t("products")}
