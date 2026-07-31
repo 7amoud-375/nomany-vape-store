@@ -32,7 +32,30 @@ class ApiError extends Error {
   }
 }
 
+/**
+ * In development, fall back to an in-browser stand-in when no PHP is running.
+ *
+ * `npm run dev` serves the React app but nothing answers /api/*, so Vite hands
+ * back index.html and every call fails. Rather than leave the dashboard
+ * unusable locally, route to devBackend instead.
+ *
+ * Guarded by import.meta.env.DEV and dynamically imported, so none of it exists
+ * in a production build.
+ */
+let devBackendPromise = null;
+let useDevBackend = false;
+
+const loadDevBackend = () => {
+  if (!devBackendPromise) devBackendPromise = import("./devBackend.js");
+  return devBackendPromise;
+};
+
 async function request(path, { method = "GET", body, auth = false, signal } = {}) {
+  if (import.meta.env.DEV && useDevBackend) {
+    const { devBackend } = await loadDevBackend();
+    return routeToDevBackend(devBackend, path, method, body);
+  }
+
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {
@@ -40,20 +63,27 @@ async function request(path, { method = "GET", body, auth = false, signal } = {}
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}/${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) return switchToDevBackend(path, method, body);
+    throw new ApiError("Could not reach the server", 0);
+  }
 
   const text = await response.text();
   let data;
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    // A PHP fatal or an HTML error page — surface something readable rather
-    // than "Unexpected token < in JSON".
+    // HTML instead of JSON means no PHP is answering — in dev that is simply
+    // "you have no backend running", not a server fault.
+    if (import.meta.env.DEV) return switchToDevBackend(path, method, body);
     throw new ApiError(`Server returned an unexpected response (${response.status})`, response.status);
   }
 
@@ -61,6 +91,75 @@ async function request(path, { method = "GET", body, auth = false, signal } = {}
     throw new ApiError(data.error || `Request failed (${response.status})`, response.status);
   }
   return data;
+}
+
+async function switchToDevBackend(path, method, body) {
+  const { devBackend, DEV_USERNAME, DEV_PASSWORD } = await loadDevBackend();
+
+  if (!useDevBackend) {
+    useDevBackend = true;
+    console.info(
+      `%c[dev] No PHP API detected — using the in-browser dev backend.\n` +
+        `Dashboard login:  ${DEV_USERNAME} / ${DEV_PASSWORD}`,
+      "color:#2eb9a7;font-weight:bold"
+    );
+  }
+
+  return routeToDevBackend(devBackend, path, method, body);
+}
+
+/** Map a REST path onto the dev backend's methods. */
+function routeToDevBackend(devBackend, path, method, body) {
+  const [resource, id, action] = path.split("?")[0].split("/");
+  const query = new URLSearchParams(path.split("?")[1] || "");
+
+  const collections = {
+    products: "products",
+    categories: "categories",
+    brands: "brands",
+    offers: "offers",
+    banners: "banners",
+  };
+
+  try {
+    if (resource === "admin") {
+      if (id === "login") return devBackend.login(body?.username, body?.password);
+      if (id === "me") return devBackend.me();
+      if (id === "password") return devBackend.changePassword();
+      if (id === "username") return devBackend.changeUsername();
+    }
+
+    if (collections[resource]) {
+      const name = collections[resource];
+      if (method === "GET") return devBackend.list(name);
+      if (method === "POST") return devBackend.create(name, body);
+      if (method === "PUT") return devBackend.update(name, id, body);
+      if (method === "DELETE") return devBackend.remove(name, id);
+    }
+
+    if (resource === "settings") {
+      return method === "PUT" ? devBackend.saveSettings(body) : devBackend.getSettings();
+    }
+
+    if (resource === "orders") {
+      if (method === "POST") return devBackend.placeOrder(body);
+      if (method === "PUT" && action === "status") return devBackend.setOrderStatus(id, body?.status);
+      if (method === "DELETE") return devBackend.deleteOrder(id);
+      return devBackend.getOrders(query.get("date"));
+    }
+
+    if (resource === "payment-methods") return devBackend.paymentMethods();
+
+    if (resource === "stock-notifications") {
+      if (method === "POST") return devBackend.addStockAlert(body?.productId, body?.contact);
+      if (method === "PUT") return devBackend.resolveStockAlert(id);
+      return devBackend.getStockAlerts(query.get("productId"));
+    }
+
+    throw new ApiError(`dev backend has no route for ${method} ${path}`, 404);
+  } catch (error) {
+    throw new ApiError(error.message, error.status ?? 400);
+  }
 }
 
 const get = (path, auth = false) => request(path, { auth });
