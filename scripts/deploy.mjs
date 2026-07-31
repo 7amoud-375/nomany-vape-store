@@ -96,6 +96,7 @@ try {
       ["callback.php", "api/callback.php"],
       ["verify.php", "api/verify.php"],
       ["vodafone.php", "api/vodafone.php"],
+      ["upload.php", "api/upload.php"],
       ["lib/bootstrap.php", "api/lib/bootstrap.php"],
       ["lib/firestore.php", "api/lib/firestore.php"],
       ["data/.htaccess", "api/data/.htaccess"],

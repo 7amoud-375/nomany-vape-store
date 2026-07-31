@@ -1,27 +1,25 @@
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { app } from "../firebase";
+import { auth } from "../firebase";
 
 /**
- * Product images live in Firebase Storage; the catalogue stores only their URLs.
+ * Product image uploads.
  *
- * The previous uploader base64-encoded each file straight into the product
- * object, which all lands in the single `store/products` document. That
- * document is capped at 1 MiB by Firestore and is already ~230 KB of text, so
- * one 2 MB photo (≈2.7 MB once base64-encoded) would push the whole catalogue
- * over the limit and every subsequent save would fail. A download URL is ~100
- * bytes.
+ * These go to our own server (api/upload.php), not Firebase Storage. Storage
+ * was never enabled on the project — the bucket returns 404 — so the previous
+ * implementation hung retrying and then failed with nothing to show for it.
+ * The hosting plan already includes the disk space.
  */
 
-const storage = getStorage(app);
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
-/** Hard ceiling on what we accept before compression. */
-const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_DIMENSION = 1400;
-const JPEG_QUALITY = 0.82;
+const QUALITY = 0.82;
+/** Give up rather than leaving the admin watching a spinner forever. */
+const UPLOAD_TIMEOUT_MS = 45_000;
 
 /**
- * Downscale and re-encode in the browser so a 6 MB phone photo becomes a
- * ~150 KB upload. Keeps PNGs with transparency as PNG.
+ * Downscale and re-encode in the browser, so a 6 MB phone photo uploads as
+ * roughly 150 KB. Also means a slow connection is not sending megabytes.
  */
 const compress = (file) =>
   new Promise((resolve, reject) => {
@@ -43,7 +41,7 @@ const compress = (file) =>
       const keepAlpha = file.type === "image/png" || file.type === "image/webp";
 
       if (!keepAlpha) {
-        // JPEG has no alpha; without this, transparent areas render black.
+        // JPEG has no alpha channel; without this, transparency renders black.
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, width, height);
       }
@@ -52,7 +50,7 @@ const compress = (file) =>
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error("Could not process the image"))),
         keepAlpha ? "image/webp" : "image/jpeg",
-        JPEG_QUALITY
+        QUALITY
       );
     };
 
@@ -68,27 +66,46 @@ const compress = (file) =>
 export const uploadProductImage = async (file) => {
   if (!file) throw new Error("No file given");
   if (!file.type?.startsWith("image/")) throw new Error("Only image files are allowed");
-  if (file.size > MAX_SOURCE_BYTES) throw new Error("That image is larger than 10 MB");
+  if (file.size > MAX_SOURCE_BYTES) throw new Error("That image is larger than 12 MB");
 
+  const user = auth.currentUser;
+  if (!user) throw new Error("Your session expired — sign in again");
+
+  const token = await user.getIdToken();
   const blob = await compress(file);
-  const extension = blob.type === "image/webp" ? "webp" : "jpg";
-  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
 
-  const fileRef = ref(storage, `products/${name}`);
-  await uploadBytes(fileRef, blob, { contentType: blob.type, cacheControl: "public,max-age=31536000" });
+  const form = new FormData();
+  form.append("image", blob, file.name.replace(/\.[^.]+$/, "") + (blob.type === "image/webp" ? ".webp" : ".jpg"));
 
-  return getDownloadURL(fileRef);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_BASE}/upload.php`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: controller.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data.url) {
+      throw new Error(data.error || `Upload failed (${response.status})`);
+    }
+    return data.url;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Upload timed out — check your connection and try again");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 /**
- * Best-effort removal of an image we uploaded. Failing to delete is not worth
- * blocking the admin over — an orphaned file costs a fraction of a cent.
+ * Images are left on disk when removed from a product: another product, or an
+ * older order, may still reference the same URL.
  */
-export const deleteProductImage = async (url) => {
-  if (!url || !url.includes("firebasestorage")) return;
-  try {
-    await deleteObject(ref(storage, url));
-  } catch (error) {
-    console.warn("Could not delete the stored image:", error.message);
-  }
-};
+export const deleteProductImage = async () => {};

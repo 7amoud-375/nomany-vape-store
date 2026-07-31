@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import {
-  Store,
   Share2,
   Truck,
   RotateCcw,
@@ -18,20 +17,12 @@ import { toNumber } from "../../utils";
 import Button from "../../components/ui/Button";
 import toast from "react-hot-toast";
 
-const STORE_FIELDS = [
-  { key: "storeNameAr", labelAr: "اسم المتجر (عربي)", labelEn: "Store Name (Arabic)" },
-  { key: "storeNameEn", labelAr: "اسم المتجر (English)", labelEn: "Store Name (English)" },
-  { key: "hashtagAr", labelAr: "الهاشتاج (عربي)", labelEn: "Hashtag (Arabic)" },
-  { key: "hashtagEn", labelAr: "الهاشتاج (English)", labelEn: "Hashtag (English)" },
-  { key: "addressAr", labelAr: "العنوان (عربي)", labelEn: "Address (Arabic)" },
-  { key: "addressEn", labelAr: "العنوان (English)", labelEn: "Address (English)" },
+// Store name, hashtag, address and footer text were removed at the owner's
+// request — they are set once and never change, so they only added noise. The
+// values still live in src/data/settings.js and still render on the site.
+const CONTACT_FIELDS = [
   { key: "businessHoursAr", labelAr: "ساعات العمل (عربي)", labelEn: "Business Hours (Arabic)" },
   { key: "businessHoursEn", labelAr: "ساعات العمل (English)", labelEn: "Business Hours (English)" },
-  { key: "footerTextAr", labelAr: "نص الفوتر (عربي)", labelEn: "Footer Text (Arabic)" },
-  { key: "footerTextEn", labelAr: "نص الفوتر (English)", labelEn: "Footer Text (English)" },
-];
-
-const CONTACT_FIELDS = [
   { key: "phone", labelAr: "الهاتف", labelEn: "Phone", dir: "ltr" },
   { key: "whatsapp", labelAr: "واتساب", labelEn: "WhatsApp", dir: "ltr" },
   { key: "email", labelAr: "البريد الإلكتروني", labelEn: "Email", dir: "ltr" },
@@ -47,7 +38,7 @@ const DashboardSettings = () => {
   const { t } = useTranslations();
   const isRtl = language === "ar";
 
-  const [tab, setTab] = useState("store");
+  const [tab, setTab] = useState("contact");
   const [formData, setFormData] = useState(settings);
   const [saving, setSaving] = useState(false);
 
@@ -70,7 +61,6 @@ const DashboardSettings = () => {
   });
 
   const tabs = [
-    { id: "store", icon: Store, labelAr: "بيانات المتجر", labelEn: "Store" },
     { id: "contact", icon: Share2, labelAr: "التواصل", labelEn: "Contact" },
     { id: "shipping", icon: Truck, labelAr: "الشحن", labelEn: "Shipping" },
     { id: "returns", icon: RotateCcw, labelAr: "سياسة الاسترجاع", labelEn: "Returns" },
@@ -107,17 +97,7 @@ const DashboardSettings = () => {
         />
       ) : (
         <form onSubmit={handleSubmit} className="card p-6 md:p-8 space-y-6 max-w-2xl">
-          {tab === "store" &&
-            STORE_FIELDS.map((f) => (
-              <div key={f.key}>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {isRtl ? f.labelAr : f.labelEn}
-                </label>
-                <input type="text" {...field(f.key)} className="input-field" />
-              </div>
-            ))}
-
-          {tab === "contact" &&
+                    {tab === "contact" &&
             CONTACT_FIELDS.map((f) => (
               <div key={f.key}>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

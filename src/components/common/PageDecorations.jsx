@@ -10,11 +10,7 @@ import { useLocation } from "react-router-dom";
  */
 
 const Blob = ({ className, style }) => (
-  <div
-    className={`absolute rounded-full blur-3xl deco-drift ${className}`}
-    style={style}
-    aria-hidden="true"
-  />
+  <div className={`absolute rounded-full deco-drift ${className}`} style={style} aria-hidden="true" />
 );
 
 /** Soft curling vapour trails — the shop's own subject matter. */
@@ -123,13 +119,14 @@ const PageDecorations = () => {
       className="fixed inset-0 -z-10 overflow-hidden pointer-events-none select-none"
       aria-hidden="true"
     >
-      {/* Always-present ambient wash, so no page looks flat. */}
+      {/* Always-present ambient wash, so no page looks flat. Kept to two
+          shapes and a smaller blur radius — blur is the expensive part. */}
       <Blob
-        className="w-[38rem] h-[38rem] -top-40 -start-40 bg-primary/10 dark:bg-primary/15"
+        className="w-[26rem] h-[26rem] -top-32 -start-32 bg-primary/10 dark:bg-primary/20 blur-2xl"
         style={{ animationDuration: "30s" }}
       />
       <Blob
-        className="w-[30rem] h-[30rem] bottom-[-12rem] end-[-8rem] bg-accent/10 dark:bg-accent/10"
+        className="w-[20rem] h-[20rem] bottom-[-8rem] end-[-6rem] bg-accent/10 dark:bg-accent/15 blur-2xl"
         style={{ animationDuration: "38s", animationDelay: "4s" }}
       />
 

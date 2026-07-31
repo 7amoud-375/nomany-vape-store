@@ -61,9 +61,21 @@
     font-family: 'Cairo', 'Inter', sans-serif;
   }
 
-  /* Smooth theme transitions */
-  *, *::before, *::after {
-    transition-property: background-color, border-color, color, fill, stroke;
+  /*
+   * Theme transitions are scoped to the page chrome instead of `*`.
+   *
+   * The universal selector attached a colour transition to every element on
+   * the page — on the products grid that is thousands of nodes the browser has
+   * to keep transition state for, and it made scrolling and hovering visibly
+   * laggy. Components that need a transition already declare their own.
+   */
+  body,
+  header,
+  footer,
+  aside,
+  .card,
+  .input-field {
+    transition-property: background-color, border-color, color;
     transition-duration: 200ms;
     transition-timing-function: ease-in-out;
   }
@@ -227,6 +239,18 @@
 @keyframes deco-pulse {
   0%, 100% { opacity: 0.35; }
   50%      { opacity: 0.6; }
+}
+
+/*
+ * will-change promotes each shape to its own compositor layer, so the blur is
+ * rasterised once and the animation is a GPU transform. Without it the browser
+ * re-blurs a 600px area every frame, which is what made the page feel heavy.
+ */
+.deco-drift,
+.deco-float,
+.deco-pulse {
+  will-change: transform, opacity;
+  contain: paint;
 }
 
 .deco-drift { animation: deco-drift 26s ease-in-out infinite; }
