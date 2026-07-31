@@ -2,6 +2,11 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import { useAuth } from "./AuthContext";
 import { todayLocalISO, toNumber } from "../utils";
 import { homepage } from "../data/homepage";
+import { categories as seedCategories } from "../data/categories";
+import { brands as seedBrands } from "../data/brands";
+import { banners as seedBanners } from "../data/banners";
+import { products as seedProducts } from "../data/products";
+import { settings as seedSettings } from "../data/settings";
 import * as api from "../services/apiClient";
 import toast from "react-hot-toast";
 
@@ -33,29 +38,47 @@ export const DataProvider = ({ children }) => {
   const [loadError, setLoadError] = useState(null);
 
   // -- Catalogue ------------------------------------------------------------
+  /**
+   * Load from the API, falling back to the bundled sample data if it cannot be
+   * reached.
+   *
+   * Without this the storefront renders completely blank whenever the API is
+   * down or absent — no hero, no categories, no products — which is far worse
+   * than showing placeholder content. It also means `npm run dev` works on a
+   * machine with no PHP.
+   *
+   * An empty array from a *successful* response is respected as real: if the
+   * shop genuinely has no products, that is what to show.
+   */
   const reload = useCallback(async () => {
-    try {
-      const [p, c, b, o, bn, s] = await Promise.all([
-        api.fetchProducts(),
-        api.fetchCategories(),
-        api.fetchBrands(),
-        api.fetchOffers(),
-        api.fetchBanners(),
-        api.fetchSettings(),
-      ]);
-      setProducts(p);
-      setCategories(c);
-      setBrands(b);
-      setOffers(o);
-      setBanners(bn);
-      setSettings(s);
-      setLoadError(null);
-    } catch (error) {
-      console.error("Could not load store data:", error);
-      setLoadError(error.message);
-    } finally {
-      setIsLoading(false);
-    }
+    const load = async (fetcher, fallback, label) => {
+      try {
+        return { data: await fetcher(), ok: true };
+      } catch (error) {
+        console.warn(`API unavailable for ${label}, using sample data:`, error.message);
+        return { data: fallback, ok: false };
+      }
+    };
+
+    const [p, c, b, o, bn, s] = await Promise.all([
+      load(api.fetchProducts, seedProducts, "products"),
+      load(api.fetchCategories, seedCategories, "categories"),
+      load(api.fetchBrands, seedBrands, "brands"),
+      load(api.fetchOffers, [], "offers"),
+      load(api.fetchBanners, seedBanners, "banners"),
+      load(api.fetchSettings, seedSettings, "settings"),
+    ]);
+
+    setProducts(p.data);
+    setCategories(c.data);
+    setBrands(b.data);
+    setOffers(o.data);
+    setBanners(bn.data);
+    setSettings(s.data);
+
+    const offline = [p, c, b, o, bn, s].some((r) => !r.ok);
+    setLoadError(offline ? "offline" : null);
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {

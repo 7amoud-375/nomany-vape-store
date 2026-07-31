@@ -94,15 +94,18 @@ function shape_offer($row)
 function shape_banner($row)
 {
     return [
-        'id'         => (int) $row['id'],
-        'titleEn'    => $row['title_en'],
-        'titleAr'    => $row['title_ar'],
-        'subtitleEn' => $row['subtitle_en'],
-        'subtitleAr' => $row['subtitle_ar'],
-        'image'      => $row['image_url'],
-        'link'       => $row['link'],
-        'order'      => (int) $row['sort_order'],
-        'active'     => (bool) $row['active'],
+        'id'            => (int) $row['id'],
+        'titleEn'       => $row['title_en'],
+        'titleAr'       => $row['title_ar'],
+        'subtitleEn'    => $row['subtitle_en'],
+        'subtitleAr'    => $row['subtitle_ar'],
+        'image'         => $row['image_url'],
+        // Field names match what HeroSlider reads.
+        'buttonTextEn'  => $row['button_text_en'],
+        'buttonTextAr'  => $row['button_text_ar'],
+        'buttonLink'    => $row['link'],
+        'order'         => (int) $row['sort_order'],
+        'active'        => (bool) $row['active'],
     ];
 }
 
@@ -368,19 +371,22 @@ try {
         $fields = [
             $body['titleEn'] ?? null, $body['titleAr'] ?? null,
             $body['subtitleEn'] ?? null, $body['subtitleAr'] ?? null,
-            $body['image'] ?? null, $body['link'] ?? null,
+            $body['image'] ?? null,
+            $body['buttonTextEn'] ?? null, $body['buttonTextAr'] ?? null,
+            $body['buttonLink'] ?? null,
             (int) ($body['order'] ?? 0), bool_int($body['active'] ?? true),
         ];
 
         if ($method === 'POST') {
-            db_run('INSERT INTO banners (title_en, title_ar, subtitle_en, subtitle_ar, image_url, link, sort_order, active)
-                    VALUES (?,?,?,?,?,?,?,?)', $fields);
+            db_run('INSERT INTO banners (title_en, title_ar, subtitle_en, subtitle_ar, image_url,
+                    button_text_en, button_text_ar, link, sort_order, active)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)', $fields);
             api_json(shape_banner(db_one('SELECT * FROM banners WHERE id = ?', [db_insert_id()])), 201);
         }
         if ($method === 'PUT') {
             $fields[] = (int) $id;
-            db_run('UPDATE banners SET title_en=?, title_ar=?, subtitle_en=?, subtitle_ar=?,
-                    image_url=?, link=?, sort_order=?, active=? WHERE id=?', $fields);
+            db_run('UPDATE banners SET title_en=?, title_ar=?, subtitle_en=?, subtitle_ar=?, image_url=?,
+                    button_text_en=?, button_text_ar=?, link=?, sort_order=?, active=? WHERE id=?', $fields);
             api_json(shape_banner(db_one('SELECT * FROM banners WHERE id = ?', [(int) $id])));
         }
         if ($method === 'DELETE') {

@@ -136,6 +136,8 @@ function db_init()
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // button_text_* and link feed the hero slider's call to action; without
+    // them the slide renders with an unlabelled button.
     $pdo->exec("CREATE TABLE IF NOT EXISTS banners (
         id INT AUTO_INCREMENT PRIMARY KEY,
         title_en VARCHAR(190),
@@ -143,11 +145,22 @@ function db_init()
         subtitle_en TEXT,
         subtitle_ar TEXT,
         image_url TEXT,
+        button_text_en VARCHAR(120),
+        button_text_ar VARCHAR(120),
         link VARCHAR(255),
         sort_order INT DEFAULT 0,
         active TINYINT(1) NOT NULL DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Older databases predate the button columns.
+    foreach (['button_text_en VARCHAR(120)', 'button_text_ar VARCHAR(120)'] as $column) {
+        try {
+            $pdo->exec("ALTER TABLE banners ADD COLUMN {$column}");
+        } catch (PDOException $e) {
+            // Column already exists — nothing to do.
+        }
+    }
 
     // payment_status is separate from status on purpose: an order can be
     // confirmed and unpaid (cash on delivery) or paid and still preparing.

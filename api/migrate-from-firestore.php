@@ -212,12 +212,14 @@ if (table_is_empty('offers')) {
 $banners = fetch_doc($base, 'banners') ?: [];
 if (table_is_empty('banners')) {
     foreach ($banners as $b) {
-        db_run('INSERT INTO banners (title_en, title_ar, subtitle_en, subtitle_ar, image_url, link, sort_order, active)
-                VALUES (?,?,?,?,?,?,?,?)', [
+        db_run('INSERT INTO banners (title_en, title_ar, subtitle_en, subtitle_ar, image_url,
+                button_text_en, button_text_ar, link, sort_order, active)
+                VALUES (?,?,?,?,?,?,?,?,?,?)', [
             $b['titleEn'] ?? null, $b['titleAr'] ?? null,
             $b['subtitleEn'] ?? null, $b['subtitleAr'] ?? null,
             externalise_image($b['image'] ?? null, $log),
-            $b['link'] ?? null, (int) ($b['order'] ?? 0),
+            $b['buttonTextEn'] ?? null, $b['buttonTextAr'] ?? null,
+            $b['buttonLink'] ?? $b['link'] ?? null, (int) ($b['order'] ?? 0),
             !empty($b['active']) ? 1 : 0,
         ]);
     }
