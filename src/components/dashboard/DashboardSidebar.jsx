@@ -1,26 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard,
-  Package,
-  Grid3X3,
-  Tag,
-  Percent,
-  ShoppingCart,
-  BarChart3,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  Store,
+  LayoutDashboard, Package, Grid3X3, Tag, Percent,
+  ShoppingCart, BarChart3, Settings, LogOut, Menu, X, Store,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useAuth } from "../../context/AuthContext";
-import { useTranslations } from "../../hooks/useTranslations";
+import { useData } from "../../context/DataContext";
 import navigation from "../../data/navigation";
 import { ADMIN_LOGIN_PATH } from "../../constants";
+import { CountBadge } from "./ui";
 
 const iconMap = {
   overview: LayoutDashboard,
@@ -36,35 +26,38 @@ const iconMap = {
 const DashboardSidebar = () => {
   const { language, isRTL } = useLanguage();
   const { logout, username } = useAuth();
-  const { t } = useTranslations();
+  const { products, categories, brands, offers, orders } = useData();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const panelRef = useRef(null);
 
-  const navLinks = navigation.dashboard;
+  // Live tallies beside each menu entry, the way the reference console does it.
+  const counts = {
+    products: products?.length ?? 0,
+    categories: categories?.length ?? 0,
+    brands: brands?.length ?? 0,
+    offers: offers?.filter((o) => o.active).length ?? 0,
+    orders: orders?.length ?? 0,
+  };
 
-  // Close on navigation. The per-link onClick missed any route change that did
-  // not come from clicking a link -- back button, redirect, programmatic nav.
+  // Close on any route change, not just link clicks — back button and redirects
+  // must close it too.
   useEffect(() => {
     setIsMobileOpen(false);
   }, [location.pathname]);
 
-  // Escape closes it, and the page behind must not scroll while it is open.
   useEffect(() => {
     if (!isMobileOpen) return undefined;
 
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setIsMobileOpen(false);
-    };
+    const onKeyDown = (e) => e.key === "Escape" && setIsMobileOpen(false);
     window.addEventListener("keydown", onKeyDown);
 
-    const previousOverflow = document.body.style.overflow;
+    const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow = previous;
     };
   }, [isMobileOpen]);
 
@@ -75,18 +68,12 @@ const DashboardSidebar = () => {
 
   return (
     <>
-      {/* Open button. Hidden while the panel is open so it cannot sit on top of
-          the panel's own content -- the old version overlapped the header. */}
       {!isMobileOpen && (
         <button
           onClick={() => setIsMobileOpen(true)}
           aria-label={language === "ar" ? "فتح القائمة" : "Open menu"}
-          aria-expanded={false}
-          className={`lg:hidden fixed top-4 z-[60] p-2.5 rounded-xl bg-white dark:bg-slate-800 shadow-lg
-                      border border-gray-100 dark:border-slate-700
-                      text-gray-700 dark:text-gray-200 active:scale-95 transition-transform ${
-                        isRTL ? "right-4" : "left-4"
-                      }`}
+          className={`lg:hidden fixed top-3 z-[60] p-2.5 rounded-xl bg-primary text-white shadow-lg
+                      active:scale-95 transition-transform ${isRTL ? "right-4" : "left-4"}`}
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -99,94 +86,106 @@ const DashboardSidebar = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-[55] bg-primary-dark/60 backdrop-blur-sm lg:hidden"
             onClick={() => setIsMobileOpen(false)}
           />
         )}
       </AnimatePresence>
 
       <aside
-        ref={panelRef}
-        aria-hidden={!isMobileOpen ? undefined : false}
-        className={`fixed top-0 bottom-0 w-64 bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800
-                    z-[56] transition-transform duration-300 ease-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 w-64 z-[56] flex flex-col justify-between
+                    bg-primary text-white transition-transform duration-300 ease-out lg:translate-x-0 ${
                       isRTL
-                        ? `right-0 border-l ${isMobileOpen ? "translate-x-0" : "translate-x-full"}`
-                        : `left-0 border-r ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`
+                        ? `right-0 border-l border-accent/10 ${isMobileOpen ? "translate-x-0" : "translate-x-full"}`
+                        : `left-0 border-r border-accent/10 ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`
                     }`}
       >
-        <div className="h-full flex flex-col">
-          <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0">
-                <span className="text-white font-bold text-lg">N</span>
-              </div>
-              <div className="min-w-0">
-                <p className="font-bold text-gray-900 dark:text-white truncate">{t("dashboard")}</p>
-                <p className="text-xs text-gray-400 truncate">{username || "Admin"}</p>
-              </div>
+        <div className="min-h-0 flex flex-col">
+          <div className="flex items-start justify-between gap-2 border-b border-white/10 p-6">
+            <div className="min-w-0">
+              <h2 className="font-display text-2xl font-bold text-accent truncate">
+                {language === "ar" ? "النعماني" : "Nomany"}
+              </h2>
+              <p className="mt-1 text-[10px] uppercase tracking-widest text-white/50">
+                {language === "ar" ? "لوحة التحكم" : "Admin Console"}
+              </p>
             </div>
-
-            {/* Close lives inside the panel so it is always reachable. */}
             <button
               onClick={() => setIsMobileOpen(false)}
-              aria-label={language === "ar" ? "إغلاق القائمة" : "Close menu"}
-              className="lg:hidden p-2 -m-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200
-                         hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+              aria-label={language === "ar" ? "إغلاق" : "Close"}
+              className="lg:hidden shrink-0 -m-2 p-2 text-white/60 hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            {navLinks.map((link) => {
+          <nav className="flex-1 overflow-y-auto space-y-1 p-4">
+            {navigation.dashboard.map((link) => {
               const Icon = iconMap[link.id] || LayoutDashboard;
-              // `end` on the index route stops "/dashboard" staying active on
-              // every child page.
+              const count = counts[link.id];
+
               return (
                 <NavLink
                   key={link.id}
                   to={link.path}
                   end={link.path === "/dashboard"}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                    `flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${
                       isActive
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800"
+                        ? `bg-white/5 text-accent ${isRTL ? "border-l-4" : "border-r-4"} border-accent`
+                        : "text-white/85 hover:bg-white/5"
                     }`
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      <Icon className="w-5 h-5 shrink-0" />
-                      <span className="flex-1">{language === "ar" ? link.labelAr : link.labelEn}</span>
-                      {isActive && <ChevronRight className={`w-4 h-4 ${isRTL ? "rotate-180" : ""}`} />}
+                      <Icon size={18} className={isActive ? "text-accent" : "text-white/60"} />
+                      <span className="flex-1 text-sm font-medium truncate">
+                        {language === "ar" ? link.labelAr : link.labelEn}
+                      </span>
+                      {count > 0 && <CountBadge value={count} active />}
                     </>
                   )}
                 </NavLink>
               );
             })}
           </nav>
+        </div>
 
-          <div className="p-4 border-t border-gray-100 dark:border-slate-800 space-y-1">
-            <NavLink
-              to="/"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
-                         text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Store className="w-5 h-5" />
-              {language === "ar" ? "عرض المتجر" : "View store"}
-            </NavLink>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-500
-                         hover:bg-red-50 dark:hover:bg-red-900/20 w-full transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              {language === "ar" ? "تسجيل الخروج" : "Logout"}
-            </button>
+        <div className="space-y-3 border-t border-white/10 p-4">
+          <div className="flex items-center gap-3 px-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/20 text-sm font-bold uppercase text-accent">
+              {username?.slice(0, 1) || "A"}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-white" dir="ltr">
+                {username || "Admin"}
+              </p>
+              <p className="truncate text-[10px] text-white/50">
+                {language === "ar" ? "مدير" : "Administrator"}
+              </p>
+            </div>
           </div>
+
+          <NavLink
+            to="/"
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-white/85 transition-colors hover:bg-white/5"
+          >
+            <Store size={18} className="text-white/60" />
+            <span className="text-sm font-medium">
+              {language === "ar" ? "عرض المتجر" : "View store"}
+            </span>
+          </NavLink>
+
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-start text-red-300 transition-colors hover:bg-red-500/10"
+          >
+            <LogOut size={18} className="text-red-400/80" />
+            <span className="text-sm font-medium">
+              {language === "ar" ? "تسجيل الخروج" : "Log out"}
+            </span>
+          </button>
         </div>
       </aside>
     </>

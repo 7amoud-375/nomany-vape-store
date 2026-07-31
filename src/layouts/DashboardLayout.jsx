@@ -21,18 +21,19 @@ const DashboardLayout = () => {
 
   if (isLoading || !isAuthenticated || userRole !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-secondary-light dark:bg-slate-950">
         <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-slate-950">
+    // Cream page behind greige cards, matching the reference console.
+    <div className="flex min-h-screen bg-secondary-light dark:bg-slate-950">
       <DashboardSidebar />
-      <div className={`flex-1 flex flex-col ${isRTL ? "lg:mr-64" : "lg:ml-64"}`}>
+      <div className={`flex-1 min-w-0 flex flex-col ${isRTL ? "lg:mr-64" : "lg:ml-64"}`}>
         <DashboardHeader />
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           <Outlet />
         </main>
       </div>

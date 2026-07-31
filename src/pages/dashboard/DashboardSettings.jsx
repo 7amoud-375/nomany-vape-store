@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useTranslations } from "../../hooks/useTranslations";
 import { toNumber } from "../../utils";
 import Button from "../../components/ui/Button";
+import { PageHeader } from "../../components/dashboard/ui";
 import toast from "react-hot-toast";
 
 // Store name, hashtag, address and footer text were removed at the owner's
@@ -69,7 +70,7 @@ const DashboardSettings = () => {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t("settings")}</h1>
+      <div className="mb-6"><PageHeader title={t("settings")} subtitle={language === "ar" ? "إعدادات المتجر والحساب" : "Store and account settings"} /></div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-6 -mx-1 px-1">
         {tabs.map(({ id, icon: Icon, labelAr, labelEn }) => (

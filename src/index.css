@@ -1,5 +1,5 @@
 /* Google Fonts — MUST be first before any other rules */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Aref+Ruqaa:wght@400;700&display=swap');
 
 @import "tailwindcss";
 
@@ -20,6 +20,15 @@
   --color-surface: #ffffff;
   --color-surface-raised: #FAF9F6;
   --color-hairline: #f1f1ef;
+
+  /* Display face for dashboard headings. Latin only — the RTL rule below
+     swaps in an Arabic display face, since Fraunces has no Arabic glyphs and
+     would silently fall back to the body font mid-heading. */
+  --font-display: 'Fraunces', Georgia, serif;
+}
+
+[dir="rtl"] .font-display {
+  font-family: 'Aref Ruqaa', 'Cairo', Georgia, serif;
 }
 
 /*

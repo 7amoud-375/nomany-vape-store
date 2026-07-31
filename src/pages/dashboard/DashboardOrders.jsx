@@ -11,6 +11,7 @@ import { formatPrice, todayLocalISO, toNumber, productImage } from "../../utils"
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from "../../constants";
 import Modal from "../../components/ui/Modal";
 import Button from "../../components/ui/Button";
+import { PageHeader } from "../../components/dashboard/ui";
 
 const STATUS_FLOW = [
   "awaiting_payment", "paid", "pending", "confirmed",
@@ -83,7 +84,7 @@ const DashboardOrders = () => {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("orders")}</h1>
+        <div className="mb-6"><PageHeader title={t("orders")} subtitle={language === "ar" ? "متابعة الطلبات وحالتها" : "Track orders and their status"} /></div>
         <div className="flex items-center gap-2 text-sm">
           <span className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary font-medium">
             {filtered.length} {isRtl ? "طلب" : "orders"}

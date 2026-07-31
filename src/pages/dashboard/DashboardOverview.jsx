@@ -18,6 +18,7 @@ import { useTranslations } from "../../hooks/useTranslations";
 import { formatPrice } from "../../utils";
 import StatsCard from "../../components/dashboard/StatsCard";
 import DataTable from "../../components/dashboard/DataTable";
+import { PageHeader } from "../../components/dashboard/ui";
 
 const DashboardOverview = () => {
   const { language } = useLanguage();
@@ -175,7 +176,7 @@ const DashboardOverview = () => {
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("overview")}</h1>
+        <div className="mb-6"><PageHeader title={t("overview")} subtitle={language === "ar" ? "ملخص المتجر النهاردة" : "Your store at a glance"} /></div>
 
         {/* Month Filter */}
         <div className="flex items-center gap-3">

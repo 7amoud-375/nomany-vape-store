@@ -8,6 +8,7 @@ import { CardGrid, AdminCard } from "../../components/dashboard/AdminCardGrid";
 import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import OfferForm from "../../components/dashboard/OfferForm";
+import { PageHeader } from "../../components/dashboard/ui";
 
 const DashboardOffers = () => {
   const { language } = useLanguage();
@@ -61,12 +62,13 @@ const DashboardOffers = () => {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("offers")}</h1>
+      <div className="mb-8">
+        <PageHeader title={t("offers")} subtitle={language === "ar" ? "الخصومات والعروض" : "Discounts and promotions"}>
         <Button onClick={() => { setFormData(emptyOffer); setAddModal(true); }}>
           <Plus className="w-4 h-4" />
           {language === "ar" ? "إضافة عرض" : "Add Offer"}
         </Button>
+        </PageHeader>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

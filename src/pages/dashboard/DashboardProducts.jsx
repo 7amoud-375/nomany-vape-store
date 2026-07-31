@@ -10,6 +10,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import ProductForm from "../../components/dashboard/ProductForm";
 import GalleryPicker from "../../components/dashboard/GalleryPicker";
+import { PageHeader } from "../../components/dashboard/ui";
 
 const DashboardProducts = () => {
   const { language } = useLanguage();
@@ -114,12 +115,13 @@ const DashboardProducts = () => {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("products")}</h1>
+      <div className="mb-8">
+        <PageHeader title={t("products")} subtitle={language === "ar" ? "إدارة الكتالوج والأسعار" : "Manage your catalogue and pricing"}>
         <Button onClick={handleAdd}>
           <Plus className="w-4 h-4" />
           {t("addProduct")}
         </Button>
+        </PageHeader>
       </div>
 
       {/* SEARCH INPUT - This is the one that works */}

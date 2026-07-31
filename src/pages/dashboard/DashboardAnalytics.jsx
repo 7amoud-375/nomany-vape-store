@@ -4,6 +4,7 @@ import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
 import { formatPrice } from "../../utils";
 import StatsCard from "../../components/dashboard/StatsCard";
+import { PageHeader } from "../../components/dashboard/ui";
 import { BarChart3, TrendingUp, DollarSign, ShoppingCart, Package, Users, Tag, Activity } from "lucide-react";
 
 // Simple SVG Bar Chart Component
@@ -275,7 +276,7 @@ const DashboardAnalytics = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t("analytics")}</h1>
+      <div className="mb-6"><PageHeader title={t("analytics")} subtitle={language === "ar" ? "أرقام المتجر الحقيقية" : "Real numbers from your store"} /></div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
