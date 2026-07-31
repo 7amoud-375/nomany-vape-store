@@ -11,7 +11,7 @@ import toast from "react-hot-toast";
  * Dashboard sign-in, reachable only at ADMIN_LOGIN_PATH.
  *
  * There is no sign-up: the store has no customer accounts, and the single admin
- * account is created in the Firebase console.
+ * account is seeded from api/.env on first boot.
  */
 const AdminLoginPage = () => {
   const { login, isAuthenticated, isLoading } = useAuth();

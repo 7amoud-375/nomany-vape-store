@@ -1,11 +1,8 @@
 # ---------------------------------------------------------------------------
-# Protect secrets and internal data.
-#
-# Apache 2.4 uses `Require all denied`; 2.2 uses `Order allow,deny`. The
-# <IfModule> guards pick the right one so this file is safe on either.
+# API routing and protection.
 # ---------------------------------------------------------------------------
 
-# Never serve dotfiles, env files, or anything in the data store.
+# Never serve secrets, the database config, or anything in the data store.
 <FilesMatch "^\.|\.(env|ini|log|json|md|sql|bak)$">
     <IfModule mod_authz_core.c>
         Require all denied
@@ -16,11 +13,27 @@
     </IfModule>
 </FilesMatch>
 
-# No directory listings.
 Options -Indexes
 
-# Do not leak the PHP version in response headers.
 <IfModule mod_headers.c>
     Header unset X-Powered-By
     Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /api/
+
+    # Apache with mod_php drops the Authorization header unless it is passed
+    # through explicitly — without this every admin request looks signed-out.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Real files (upload.php, callback.php) are served directly.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else is handled by the front controller.
+    RewriteRule ^ index.php [QSA,L]
 </IfModule>

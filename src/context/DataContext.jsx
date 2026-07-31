@@ -1,40 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { products as initialProducts } from "../data/products";
-import { categories as initialCategories } from "../data/categories";
-import { brands as initialBrands } from "../data/brands";
-import { banners as initialBanners } from "../data/banners";
-import { offers as initialOffers } from "../data/offers";
-import { testimonials as initialTestimonials } from "../data/testimonials";
-import { settings as initialSettings } from "../data/settings";
-import { homepage as initialHomepage } from "../data/homepage";
-import { getLocalStorage, setLocalStorage, generateId, todayLocalISO } from "../utils";
-import { LOCAL_STORAGE_KEYS } from "../constants";
 import { useAuth } from "./AuthContext";
-import {
-  addOrderToFirebase,
-  updateOrderStatusInFirebase,
-  deleteOrderFromFirebase,
-  subscribeToOrders,
-  syncProductsToFirebase,
-  subscribeToProducts,
-  syncCategoriesToFirebase,
-  subscribeToCategories,
-  syncBrandsToFirebase,
-  subscribeToBrands,
-  syncOffersToFirebase,
-  subscribeToOffers,
-  syncBannersToFirebase,
-  subscribeToBanners,
-  syncTestimonialsToFirebase,
-  subscribeToTestimonials,
-  syncSettingsToFirebase,
-  subscribeToSettings,
-  syncHomepageToFirebase,
-  subscribeToHomepage,
-  addStockNotificationRequest,
-  getPendingStockNotifications,
-  markStockNotificationsSent,
-} from "../services/firebaseService";
+import { todayLocalISO, toNumber } from "../utils";
+import { homepage } from "../data/homepage";
+import * as api from "../services/apiClient";
 import toast from "react-hot-toast";
 
 const DataContext = createContext();
@@ -47,523 +15,325 @@ export const useData = () => {
   return context;
 };
 
-/**
- * One store collection: seeded from localStorage, kept live by Firebase, and
- * written back through `commit`.
- *
- * `commit` deliberately performs its writes *outside* the state updater. The
- * previous version called Firebase from inside setState, which React may invoke
- * more than once — under StrictMode every save fired twice.
- */
-function useSyncedList({ storageKey, seed, subscribe, sync, label }) {
-  const [items, setItems] = useState(() => getLocalStorage(storageKey, seed));
-
-  // Kept in a ref so `subscribe` never needs to be re-run when items change.
-  const subscribeRef = useRef(subscribe);
-  subscribeRef.current = subscribe;
-
-  useEffect(() => {
-    const unsubscribe = subscribeRef.current((remote) => {
-      // null means the document does not exist yet — keep the seed data.
-      // An empty array is a real value and must be applied, otherwise deleting
-      // the last item never propagates to other browsers.
-      if (!Array.isArray(remote)) return;
-      setItems(remote);
-      setLocalStorage(storageKey, remote);
-    });
-    return () => unsubscribe();
-  }, [storageKey]);
-
-  const commit = useCallback(
-    (next) => {
-      setItems(next);
-      setLocalStorage(storageKey, next);
-      Promise.resolve(sync(next)).catch((error) => {
-        console.error(`Failed to sync ${label}:`, error);
-        toast.error(`Saved on this device, but syncing ${label} to the cloud failed`);
-      });
-      return next;
-    },
-    [storageKey, sync, label]
-  );
-
-  return [items, commit];
-}
-
-/** Same contract as useSyncedList, for the single-object documents. */
-function useSyncedObject({ storageKey, seed, subscribe, sync, label }) {
-  const [value, setValue] = useState(() => getLocalStorage(storageKey, seed));
-
-  const subscribeRef = useRef(subscribe);
-  subscribeRef.current = subscribe;
-
-  useEffect(() => {
-    const unsubscribe = subscribeRef.current((remote) => {
-      if (!remote || typeof remote !== "object") return;
-      setValue(remote);
-      setLocalStorage(storageKey, remote);
-    });
-    return () => unsubscribe();
-  }, [storageKey]);
-
-  const commit = useCallback(
-    (next) => {
-      setValue(next);
-      setLocalStorage(storageKey, next);
-      Promise.resolve(sync(next)).catch((error) => {
-        console.error(`Failed to sync ${label}:`, error);
-        toast.error(`Saved on this device, but syncing ${label} to the cloud failed`);
-      });
-      return next;
-    },
-    [storageKey, sync, label]
-  );
-
-  return [value, commit];
-}
+/** How often the dashboard re-checks for new orders. */
+const ORDER_POLL_MS = 20_000;
 
 export const DataProvider = ({ children }) => {
-  const { userRole, isLoading: authLoading } = useAuth();
-  const isAdmin = userRole === "admin";
+  const { isAdmin, isLoading: authLoading } = useAuth();
 
-  const [products, commitProducts] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.PRODUCTS,
-    seed: initialProducts,
-    subscribe: subscribeToProducts,
-    sync: syncProductsToFirebase,
-    label: "products",
-  });
-
-  const [categories, commitCategories] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.CATEGORIES,
-    seed: initialCategories,
-    subscribe: subscribeToCategories,
-    sync: syncCategoriesToFirebase,
-    label: "categories",
-  });
-
-  const [brands, commitBrands] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.BRANDS,
-    seed: initialBrands,
-    subscribe: subscribeToBrands,
-    sync: syncBrandsToFirebase,
-    label: "brands",
-  });
-
-  const [banners, commitBanners] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.BANNERS,
-    seed: initialBanners,
-    subscribe: subscribeToBanners,
-    sync: syncBannersToFirebase,
-    label: "banners",
-  });
-
-  const [offers, commitOffers] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.OFFERS,
-    seed: initialOffers,
-    subscribe: subscribeToOffers,
-    sync: syncOffersToFirebase,
-    label: "offers",
-  });
-
-  const [testimonials, commitTestimonials] = useSyncedList({
-    storageKey: LOCAL_STORAGE_KEYS.TESTIMONIALS,
-    seed: initialTestimonials,
-    subscribe: subscribeToTestimonials,
-    sync: syncTestimonialsToFirebase,
-    label: "testimonials",
-  });
-
-  const [settings, commitSettings] = useSyncedObject({
-    storageKey: LOCAL_STORAGE_KEYS.SETTINGS,
-    seed: initialSettings,
-    subscribe: subscribeToSettings,
-    sync: syncSettingsToFirebase,
-    label: "settings",
-  });
-
-  const [homepage, commitHomepage] = useSyncedObject({
-    storageKey: LOCAL_STORAGE_KEYS.HOMEPAGE,
-    seed: initialHomepage,
-    subscribe: subscribeToHomepage,
-    sync: syncHomepageToFirebase,
-    label: "homepage",
-  });
-
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [banners, setBanners] = useState([]);
+  const [settings, setSettings] = useState({});
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
-  // ========== ORDERS ==========
-  // Only the admin reads orders. There are no customer accounts, so there is
-  // nobody else with a legitimate reason to hold the collection open -- and
-  // firestore.rules denies it anyway.
+  // -- Catalogue ------------------------------------------------------------
+  const reload = useCallback(async () => {
+    try {
+      const [p, c, b, o, bn, s] = await Promise.all([
+        api.fetchProducts(),
+        api.fetchCategories(),
+        api.fetchBrands(),
+        api.fetchOffers(),
+        api.fetchBanners(),
+        api.fetchSettings(),
+      ]);
+      setProducts(p);
+      setCategories(c);
+      setBrands(b);
+      setOffers(o);
+      setBanners(bn);
+      setSettings(s);
+      setLoadError(null);
+    } catch (error) {
+      console.error("Could not load store data:", error);
+      setLoadError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // -- Orders (admin only) ---------------------------------------------------
+  // Polled rather than pushed: shared hosting has no persistent connection, and
+  // a 20s refresh is well within what "reaches the dashboard on its own" needs.
+  const [orderDate, setOrderDate] = useState(() => todayLocalISO());
+  const previousCount = useRef(null);
+
+  const loadOrders = useCallback(
+    async (date) => {
+      if (!isAdmin) {
+        setOrders([]);
+        setOrdersLoading(false);
+        return;
+      }
+      try {
+        const rows = await api.fetchOrders(date);
+        setOrders(rows);
+
+        // Announce genuinely new arrivals, but not on the first load.
+        if (previousCount.current !== null && rows.length > previousCount.current) {
+          const fresh = rows.length - previousCount.current;
+          toast.success(`${fresh} new order${fresh > 1 ? "s" : ""}`, { icon: "🛒" });
+        }
+        previousCount.current = rows.length;
+      } catch (error) {
+        console.error("Could not load orders:", error);
+      } finally {
+        setOrdersLoading(false);
+      }
+    },
+    [isAdmin]
+  );
+
   useEffect(() => {
     if (authLoading) return undefined;
 
-    if (!isAdmin) {
-      setOrders([]);
-      setOrdersLoading(false);
-      return undefined;
-    }
+    previousCount.current = null;
+    loadOrders(orderDate);
 
-    setOrdersLoading(true);
+    if (!isAdmin) return undefined;
 
-    const unsubscribe = subscribeToOrders(
-      (incoming) => {
-        const valid = (incoming || []).filter(
-          (order) => order != null && typeof order === "object" && order.id != null
-        );
-        valid.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
-        setOrders(valid);
-        setOrdersLoading(false);
-      },
-      () => {
-        setOrders([]);
-        setOrdersLoading(false);
-      }
-    );
+    const timer = setInterval(() => loadOrders(orderDate), ORDER_POLL_MS);
+    return () => clearInterval(timer);
+  }, [isAdmin, authLoading, orderDate, loadOrders]);
 
-    return () => unsubscribe();
-  }, [isAdmin, authLoading]);
-
-  // ========== PRODUCTS ==========
-  const addProduct = useCallback(
-    (product) => {
-      const newProduct = { ...product, id: generateId(), createdAt: new Date().toISOString() };
-      commitProducts([...products, newProduct]);
-      toast.success("Product added successfully");
-      return newProduct;
-    },
-    [products, commitProducts]
-  );
-
-  const updateProduct = useCallback(
-    (id, updates) => {
-      const previous = products.find((p) => p.id === id);
-      commitProducts(products.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-      toast.success("Product updated successfully");
-
-      // Coming back into stock: surface anyone waiting on a "notify me".
-      if (previous?.availability === false && updates.availability === true) {
-        getPendingStockNotifications(id).then((pending) => {
-          if (pending.length > 0) {
-            toast.success(
-              `${pending.length} customer${pending.length > 1 ? "s are" : " is"} waiting for this product — check "Notify Requests" to reach them.`,
-              { duration: 6000 }
-            );
-          }
-        });
-      }
-    },
-    [products, commitProducts]
-  );
-
-  const deleteProduct = useCallback(
-    (id) => {
-      commitProducts(products.filter((p) => p.id !== id));
-      toast.success("Product deleted successfully");
-    },
-    [products, commitProducts]
-  );
-
-  const duplicateProduct = useCallback(
-    (product) => {
-      const copy = {
-        ...product,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-        nameAr: `${product.nameAr} (نسخة)`,
-        nameEn: `${product.nameEn} (Copy)`,
-        sku: `${product.sku}-COPY`,
-      };
-      commitProducts([...products, copy]);
-      toast.success("Product duplicated");
-      return copy;
-    },
-    [products, commitProducts]
-  );
-
-  // ========== CATEGORIES ==========
-  const addCategory = useCallback(
-    (category) => {
-      const newCategory = { ...category, id: category.id || generateId() };
-      commitCategories([...categories, newCategory]);
-      toast.success("Category added");
-      return newCategory;
-    },
-    [categories, commitCategories]
-  );
-
-  const updateCategory = useCallback(
-    (id, updates) => {
-      commitCategories(categories.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-      toast.success("Category updated");
-    },
-    [categories, commitCategories]
-  );
-
-  const deleteCategory = useCallback(
-    (id) => {
-      const inUse = products.filter((p) => p.category === id);
-      if (inUse.length > 0) {
-        toast.error(`Cannot delete: ${inUse.length} products use this category`);
-        return false;
-      }
-      commitCategories(categories.filter((c) => c.id !== id));
-      toast.success("Category deleted");
-      return true;
-    },
-    [products, categories, commitCategories]
-  );
-
-  // ========== BRANDS ==========
-  const addBrand = useCallback(
-    (brand) => {
-      const newBrand = { ...brand, id: brand.id || generateId() };
-      commitBrands([...brands, newBrand]);
-      toast.success("Brand added");
-      return newBrand;
-    },
-    [brands, commitBrands]
-  );
-
-  const updateBrand = useCallback(
-    (id, updates) => {
-      commitBrands(brands.map((b) => (b.id === id ? { ...b, ...updates } : b)));
-      toast.success("Brand updated");
-    },
-    [brands, commitBrands]
-  );
-
-  const deleteBrand = useCallback(
-    (id) => {
-      // Products have historically stored the brand *name* rather than its id,
-      // and seed data has id === name. Match either so the guard actually fires.
-      const brand = brands.find((b) => b.id === id);
-      const inUse = products.filter((p) => p.brand === id || (brand && p.brand === brand.name));
-      if (inUse.length > 0) {
-        toast.error(`Cannot delete: ${inUse.length} products use this brand`);
-        return false;
-      }
-      commitBrands(brands.filter((b) => b.id !== id));
-      toast.success("Brand deleted");
-      return true;
-    },
-    [products, brands, commitBrands]
-  );
-
-  // ========== BANNERS ==========
-  const addBanner = useCallback(
-    (banner) => {
-      const newBanner = { ...banner, id: generateId() };
-      commitBanners([...banners, newBanner]);
-      toast.success("Banner added");
-      return newBanner;
-    },
-    [banners, commitBanners]
-  );
-
-  const updateBanner = useCallback(
-    (id, updates) => {
-      commitBanners(banners.map((b) => (b.id === id ? { ...b, ...updates } : b)));
-      toast.success("Banner updated");
-    },
-    [banners, commitBanners]
-  );
-
-  const deleteBanner = useCallback(
-    (id) => {
-      commitBanners(banners.filter((b) => b.id !== id));
-      toast.success("Banner deleted");
-    },
-    [banners, commitBanners]
-  );
-
-  // ========== OFFERS ==========
-  const addOffer = useCallback(
-    (offer) => {
-      const newOffer = { ...offer, id: generateId() };
-      commitOffers([...offers, newOffer]);
-      toast.success("Offer created");
-      return newOffer;
-    },
-    [offers, commitOffers]
-  );
-
-  const updateOffer = useCallback(
-    (id, updates) => {
-      commitOffers(offers.map((o) => (o.id === id ? { ...o, ...updates } : o)));
-      toast.success("Offer updated");
-    },
-    [offers, commitOffers]
-  );
-
-  const deleteOffer = useCallback(
-    (id) => {
-      commitOffers(offers.filter((o) => o.id !== id));
-      toast.success("Offer deleted");
-    },
-    [offers, commitOffers]
-  );
-
-  // ========== TESTIMONIALS ==========
-  const addTestimonial = useCallback(
-    (testimonial) => {
-      const newTestimonial = { ...testimonial, id: generateId() };
-      commitTestimonials([...testimonials, newTestimonial]);
-      toast.success("Testimonial added");
-      return newTestimonial;
-    },
-    [testimonials, commitTestimonials]
-  );
-
-  const updateTestimonial = useCallback(
-    (id, updates) => {
-      commitTestimonials(testimonials.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-      toast.success("Testimonial updated");
-    },
-    [testimonials, commitTestimonials]
-  );
-
-  const deleteTestimonial = useCallback(
-    (id) => {
-      commitTestimonials(testimonials.filter((t) => t.id !== id));
-      toast.success("Testimonial deleted");
-    },
-    [testimonials, commitTestimonials]
-  );
-
-  // ========== ORDER MUTATIONS ==========
-  const updateOrderStatus = useCallback(
-    async (orderId, status) => {
-      const order = orders.find((o) => o.id === orderId);
-      if (!order) {
-        toast.error("Order not found");
-        return;
-      }
-      if (!order.firebaseDocId) {
-        toast.error("Cannot update: order is not synced with the cloud");
-        return;
-      }
+  // -- Generic CRUD helper ---------------------------------------------------
+  const mutate = useCallback(
+    async (action, setter, successMessage) => {
       try {
-        await updateOrderStatusInFirebase(order.firebaseDocId, status);
-        toast.success("Order status updated");
+        const result = await action();
+        if (setter) setter(result);
+        if (successMessage) toast.success(successMessage);
+        return result;
       } catch (error) {
-        console.error("Failed to update order status:", error);
-        toast.error("Failed to update status");
-      }
-    },
-    [orders]
-  );
-
-  /**
-   * Persist an order. Returns the stored order so checkout can reference it.
-   *
-   * The local `setOrders` matters: the Firebase snapshot can lag by a moment,
-   * and without it a customer briefly saw no order at all after paying.
-   */
-  const addOrder = useCallback(
-    async (order) => {
-      if (!order || !order.id) {
-        toast.error("Invalid order data");
+        toast.error(error.message || "Something went wrong");
         return null;
-      }
-
-      try {
-        const saved = await addOrderToFirebase(order);
-        // Only the admin's own session holds an orders list; a guest placing an
-        // order has nothing to update locally.
-        setOrders((prev) => [saved, ...prev.filter((o) => o.id !== saved.id)]);
-        return saved;
-      } catch (error) {
-        console.error("Failed to save order to Firebase:", error);
-        toast.error("Order saved on this device only — please contact us to confirm it");
-        return order;
       }
     },
     []
   );
 
+  // -- Products --------------------------------------------------------------
+  const addProduct = useCallback(
+    (data) => mutate(
+      async () => {
+        const created = await api.createProduct(data);
+        setProducts((prev) => [created, ...prev]);
+        return created;
+      },
+      null,
+      "Product added"
+    ),
+    [mutate]
+  );
+
+  const updateProduct = useCallback(
+    (id, data) => mutate(
+      async () => {
+        const updated = await api.updateProductApi(id, data);
+        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        return updated;
+      },
+      null,
+      "Product updated"
+    ),
+    [mutate]
+  );
+
+  const deleteProduct = useCallback(
+    (id) => mutate(
+      async () => {
+        await api.deleteProductApi(id);
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+      },
+      null,
+      "Product deleted"
+    ),
+    [mutate]
+  );
+
+  const duplicateProduct = useCallback(
+    (product) => {
+      const { id, createdAt, ...rest } = product;
+      return addProduct({
+        ...rest,
+        nameAr: `${product.nameAr} (نسخة)`,
+        nameEn: `${product.nameEn} (Copy)`,
+        sku: product.sku ? `${product.sku}-COPY` : "",
+      });
+    },
+    [addProduct]
+  );
+
+  // -- Categories ------------------------------------------------------------
+  const addCategory = useCallback(
+    (data) => mutate(async () => {
+      const created = await api.createCategory(data);
+      setCategories((prev) => [...prev, created]);
+      return created;
+    }, null, "Category added"),
+    [mutate]
+  );
+
+  const updateCategory = useCallback(
+    (id, data) => mutate(async () => {
+      const updated = await api.updateCategoryApi(id, data);
+      setCategories((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      return updated;
+    }, null, "Category updated"),
+    [mutate]
+  );
+
+  const deleteCategory = useCallback(
+    (id) => mutate(async () => {
+      await api.deleteCategoryApi(id);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      return true;
+    }, null, "Category deleted"),
+    [mutate]
+  );
+
+  // -- Brands ----------------------------------------------------------------
+  const addBrand = useCallback(
+    (data) => mutate(async () => {
+      const created = await api.createBrand(data);
+      setBrands((prev) => [...prev, created]);
+      return created;
+    }, null, "Brand added"),
+    [mutate]
+  );
+
+  const updateBrand = useCallback(
+    (id, data) => mutate(async () => {
+      const updated = await api.updateBrandApi(id, data);
+      setBrands((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      return updated;
+    }, null, "Brand updated"),
+    [mutate]
+  );
+
+  const deleteBrand = useCallback(
+    (id) => mutate(async () => {
+      await api.deleteBrandApi(id);
+      setBrands((prev) => prev.filter((b) => b.id !== id));
+      return true;
+    }, null, "Brand deleted"),
+    [mutate]
+  );
+
+  // -- Offers ----------------------------------------------------------------
+  const addOffer = useCallback(
+    (data) => mutate(async () => {
+      const created = await api.createOffer(data);
+      setOffers((prev) => [created, ...prev]);
+      return created;
+    }, null, "Offer created"),
+    [mutate]
+  );
+
+  const updateOffer = useCallback(
+    (id, data) => mutate(async () => {
+      const updated = await api.updateOfferApi(id, data);
+      setOffers((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+      return updated;
+    }, null, "Offer updated"),
+    [mutate]
+  );
+
+  const deleteOffer = useCallback(
+    (id) => mutate(async () => {
+      await api.deleteOfferApi(id);
+      setOffers((prev) => prev.filter((o) => o.id !== id));
+    }, null, "Offer deleted"),
+    [mutate]
+  );
+
+  // -- Orders ----------------------------------------------------------------
+  const updateOrderStatus = useCallback(
+    async (orderId, status) => {
+      const order = orders.find((o) => o.id === orderId);
+      if (!order) return;
+      await mutate(async () => {
+        await api.setOrderStatus(order.dbId, status);
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
+      }, null, "Order status updated");
+    },
+    [orders, mutate]
+  );
+
   const deleteOrder = useCallback(
     async (orderId) => {
       const order = orders.find((o) => o.id === orderId);
-      if (!order) {
-        toast.error("Order not found");
-        return false;
-      }
-      // A local-only order has nothing to delete remotely; drop it from state
-      // rather than reporting a success that never happened.
-      if (!order.firebaseDocId) {
+      if (!order) return false;
+      const result = await mutate(async () => {
+        await api.deleteOrderApi(order.dbId);
         setOrders((prev) => prev.filter((o) => o.id !== orderId));
-        toast.success("Local order removed");
         return true;
-      }
-      try {
-        await deleteOrderFromFirebase(order.firebaseDocId);
-        setOrders((prev) => prev.filter((o) => o.id !== orderId));
-        toast.success("Order deleted");
-        return true;
-      } catch (error) {
-        console.error("Failed to delete order:", error);
-        toast.error("Failed to delete order");
-        return false;
-      }
+      }, null, "Order deleted");
+      return !!result;
     },
-    [orders]
+    [orders, mutate]
   );
 
-  // ========== STOCK NOTIFICATIONS ==========
+  // -- Settings --------------------------------------------------------------
+  const updateSettings = useCallback(
+    (updates) => mutate(async () => {
+      const saved = await api.saveSettings({ ...settings, ...updates });
+      setSettings(saved);
+      return saved;
+    }, null, "Settings saved"),
+    [settings, mutate]
+  );
+
+  // -- Stock notifications ---------------------------------------------------
   const requestStockNotification = useCallback(async (productId, contact) => {
     try {
-      await addStockNotificationRequest(productId, contact);
+      await api.requestStockAlert(productId, contact);
       toast.success("We'll let you know as soon as it's back!");
       return true;
     } catch (error) {
-      console.error("Notification error:", error);
-      toast.error("Something went wrong, please try again");
+      toast.error(error.message || "Something went wrong");
       return false;
     }
   }, []);
 
-  const fetchStockAlerts = useCallback((productId) => getPendingStockNotifications(productId), []);
+  const fetchStockAlerts = useCallback(async (productId) => {
+    try {
+      return await api.fetchStockAlerts(productId);
+    } catch {
+      return [];
+    }
+  }, []);
 
-  const resolveStockAlerts = useCallback((docIds) => markStockNotificationsSent(docIds), []);
+  const resolveStockAlerts = useCallback(async (ids) => {
+    await Promise.all(ids.map((id) => api.resolveStockAlert(id)));
+  }, []);
 
-  // ========== SETTINGS & HOMEPAGE ==========
-  const updateSettings = useCallback(
-    (updates) => {
-      commitSettings({ ...settings, ...updates });
-      toast.success("Settings saved");
-    },
-    [settings, commitSettings]
-  );
-
-  const updateHomepage = useCallback(
-    (updates) => {
-      commitHomepage({ ...homepage, ...updates });
-      toast.success("Homepage updated");
-    },
-    [homepage, commitHomepage]
-  );
-
-  // ========== STATS ==========
+  // -- Derived ---------------------------------------------------------------
   const stats = useMemo(() => {
     const today = todayLocalISO();
-    const currentMonth = today.slice(0, 7);
-    const valid = (orders || []).filter((o) => o != null && o.total != null);
-    const counts = (o) => o.status !== "cancelled";
+    const counted = orders.filter((o) => o.status !== "cancelled");
 
     return {
       totalProducts: products.length,
       totalCategories: categories.length,
       totalBrands: brands.length,
-      totalOrders: valid.length,
-      monthlyRevenue: valid
-        .filter((o) => (o.date?.substring(0, 7) || "") === currentMonth && counts(o))
-        .reduce((sum, o) => sum + (Number(o.total) || 0), 0),
-      dailyRevenue: valid
-        .filter((o) => o.date === today && counts(o))
-        .reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+      totalOrders: orders.length,
+      dailyRevenue: counted
+        .filter((o) => o.date === today)
+        .reduce((sum, o) => sum + toNumber(o.total), 0),
+      monthlyRevenue: counted
+        .filter((o) => String(o.date ?? "").slice(0, 7) === today.slice(0, 7))
+        .reduce((sum, o) => sum + toNumber(o.total), 0),
       activeOffers: offers.filter((o) => o.active).length,
       outOfStock: products.filter((p) => !p.availability).length,
     };
@@ -572,44 +342,25 @@ export const DataProvider = ({ children }) => {
   return (
     <DataContext.Provider
       value={{
-        products,
-        categories,
-        brands,
-        banners,
-        offers,
-        testimonials,
-        orders,
-        ordersLoading,
-        settings,
-        homepage,
+        products, categories, brands, banners, offers, settings,
+        orders, ordersLoading, isLoading, loadError,
+        orderDate, setOrderDate,
+        reload,
         stats,
-        addProduct,
-        updateProduct,
-        deleteProduct,
-        duplicateProduct,
-        addCategory,
-        updateCategory,
-        deleteCategory,
-        addBrand,
-        updateBrand,
-        deleteBrand,
-        addBanner,
-        updateBanner,
-        deleteBanner,
-        addOffer,
-        updateOffer,
-        deleteOffer,
-        addTestimonial,
-        updateTestimonial,
-        deleteTestimonial,
-        updateOrderStatus,
-        addOrder,
-        deleteOrder,
-        requestStockNotification,
-        fetchStockAlerts,
-        resolveStockAlerts,
+        addProduct, updateProduct, deleteProduct, duplicateProduct,
+        addCategory, updateCategory, deleteCategory,
+        addBrand, updateBrand, deleteBrand,
+        addOffer, updateOffer, deleteOffer,
+        updateOrderStatus, deleteOrder,
         updateSettings,
-        updateHomepage,
+        requestStockNotification, fetchStockAlerts, resolveStockAlerts,
+        // Which homepage sections render, and their titles. Static config
+        // rather than a database row — it changes when the design changes,
+        // not from the dashboard.
+        homepage,
+        // Testimonials were removed from the product; kept as an empty array so
+        // anything still importing it renders nothing rather than crashing.
+        testimonials: [],
       }}
     >
       {children}

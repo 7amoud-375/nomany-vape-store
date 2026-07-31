@@ -30,9 +30,8 @@ const DashboardHeader = () => {
 
   /**
    * Notifications are derived from `orders`, which DataContext already keeps
-   * live. The old header opened a *second* Firebase subscription to the same
-   * collection purely to trigger a re-render — double the reads, and it fired
-   * for non-admins too.
+   * live. The old header opened a second subscription to the same data purely
+   * to force a re-render, doubling the work for no benefit.
    */
   const notifications = useMemo(() => {
     return (orders || [])

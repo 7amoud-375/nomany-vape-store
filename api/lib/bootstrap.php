@@ -12,7 +12,6 @@ define('NOMANY_API', true);
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/firestore.php';
 
 function api_env()
 {
@@ -42,7 +41,7 @@ function api_json($data, $status = 200)
 
 /**
  * Return an error to the client. $internal is logged but never sent back --
- * Paymob responses and stack traces must not leak to the browser.
+ * database errors and stack traces must not leak to the browser.
  */
 function api_fail($status, $publicMessage, $internal = null)
 {
@@ -63,16 +62,16 @@ function api_cors()
         header('Vary: Origin');
     }
 
-    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
         http_response_code(204);
         exit;
     }
 
-    // A browser request from an origin we do not recognise gets nothing. Server
-    // to server callbacks (Paymob) send no Origin header, so they pass through.
+    // A browser request from an origin we do not recognise gets nothing.
+    // Server-to-server callbacks send no Origin header, so they pass through.
     if ($origin && !in_array($origin, $allowed, true)) {
         api_fail(403, 'Origin not allowed');
     }
@@ -94,7 +93,7 @@ function api_body()
 
 /**
  * Crude per-IP throttle backed by the filesystem. Enough to stop someone
- * hammering the payment endpoint and burning Paymob quota.
+ * hammering login or the order endpoint.
  */
 function api_rate_limit($bucket, $maxRequests = 20, $windowSeconds = 60)
 {
@@ -121,38 +120,4 @@ function api_rate_limit($bucket, $maxRequests = 20, $windowSeconds = 60)
 
     $hits[] = $now;
     file_put_contents($file, json_encode($hits), LOCK_EX);
-}
-
-/** Where server-side payment state lives. Denied to the web by .htaccess. */
-function api_payment_dir()
-{
-    $dir = __DIR__ . '/../data/payments';
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0700, true);
-    }
-    return $dir;
-}
-
-function api_payment_path($merchantOrderId)
-{
-    // Constrain the filename: this value reaches us from the network.
-    $safe = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $merchantOrderId);
-    if ($safe === '') {
-        api_fail(400, 'Invalid order reference');
-    }
-    return api_payment_dir() . '/' . $safe . '.json';
-}
-
-function api_payment_read($merchantOrderId)
-{
-    $path = api_payment_path($merchantOrderId);
-    if (!is_readable($path)) {
-        return null;
-    }
-    return json_decode(file_get_contents($path), true);
-}
-
-function api_payment_write($merchantOrderId, array $record)
-{
-    file_put_contents(api_payment_path($merchantOrderId), json_encode($record), LOCK_EX);
 }

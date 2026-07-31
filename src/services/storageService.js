@@ -1,12 +1,10 @@
-import { auth } from "../firebase";
+import { getToken } from "./apiClient";
 
 /**
- * Product image uploads.
+ * Product image uploads to our own server.
  *
- * These go to our own server (api/upload.php), not Firebase Storage. Storage
- * was never enabled on the project — the bucket returns 404 — so the previous
- * implementation hung retrying and then failed with nothing to show for it.
- * The hosting plan already includes the disk space.
+ * Images are downscaled and re-encoded in the browser first, so a 6 MB phone
+ * photo uploads as roughly 150 KB.
  */
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -14,13 +12,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_DIMENSION = 1400;
 const QUALITY = 0.82;
-/** Give up rather than leaving the admin watching a spinner forever. */
 const UPLOAD_TIMEOUT_MS = 45_000;
 
-/**
- * Downscale and re-encode in the browser, so a 6 MB phone photo uploads as
- * roughly 150 KB. Also means a slow connection is not sending megabytes.
- */
 const compress = (file) =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -62,20 +55,19 @@ const compress = (file) =>
     img.src = url;
   });
 
-/** Upload one image and return its public URL. */
 export const uploadProductImage = async (file) => {
   if (!file) throw new Error("No file given");
   if (!file.type?.startsWith("image/")) throw new Error("Only image files are allowed");
   if (file.size > MAX_SOURCE_BYTES) throw new Error("That image is larger than 12 MB");
 
-  const user = auth.currentUser;
-  if (!user) throw new Error("Your session expired — sign in again");
+  const token = getToken();
+  if (!token) throw new Error("Your session expired — sign in again");
 
-  const token = await user.getIdToken();
   const blob = await compress(file);
+  const extension = blob.type === "image/webp" ? ".webp" : ".jpg";
 
   const form = new FormData();
-  form.append("image", blob, file.name.replace(/\.[^.]+$/, "") + (blob.type === "image/webp" ? ".webp" : ".jpg"));
+  form.append("image", blob, file.name.replace(/\.[^.]+$/, "") + extension);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
@@ -89,7 +81,6 @@ export const uploadProductImage = async (file) => {
     });
 
     const data = await response.json().catch(() => ({}));
-
     if (!response.ok || !data.url) {
       throw new Error(data.error || `Upload failed (${response.status})`);
     }
@@ -104,8 +95,5 @@ export const uploadProductImage = async (file) => {
   }
 };
 
-/**
- * Images are left on disk when removed from a product: another product, or an
- * older order, may still reference the same URL.
- */
+/** Files are kept on disk when removed from a product — another record may use the same URL. */
 export const deleteProductImage = async () => {};

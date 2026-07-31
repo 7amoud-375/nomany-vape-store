@@ -8,9 +8,9 @@ const MAX_IMAGES = 6;
 /**
  * Manages a product's image list.
  *
- * Uploads go to Firebase Storage and only the resulting URL is kept, so the
- * catalogue document stays small. The first image is the one shown on cards and
- * in listings, and can be changed without re-uploading.
+ * Uploads go to our own server and only the resulting URL is stored. The first
+ * image is the one shown on cards and in listings, and can be promoted without
+ * re-uploading.
  */
 const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
   const isRtl = language === "ar";

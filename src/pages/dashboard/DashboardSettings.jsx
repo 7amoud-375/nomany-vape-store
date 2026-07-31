@@ -42,8 +42,8 @@ const DashboardSettings = () => {
   const [formData, setFormData] = useState(settings);
   const [saving, setSaving] = useState(false);
 
-  // settings arrives from Firebase after the first render, so seeding state
-  // once would leave the form showing stale values until a manual reload.
+  // settings arrives from the API after the first render, so seeding state once
+  // would leave the form showing stale values until a manual reload.
   useEffect(() => {
     setFormData(settings);
   }, [settings]);
@@ -173,7 +173,7 @@ const DashboardSettings = () => {
   );
 };
 
-/** Password and username changes. Kept apart because these hit Firebase Auth. */
+/** Password and username changes. Kept apart because these hit the auth API. */
 const AccountPanel = ({ isRtl, username, changePassword, changeUsername }) => {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [un, setUn] = useState({ current: "", next: "" });

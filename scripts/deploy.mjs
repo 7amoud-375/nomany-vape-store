@@ -90,16 +90,16 @@ try {
   if (uploadApi) {
     console.log("Uploading api/ (excluding .env) ...");
     const apiFiles = [
-      [".htaccess", "api/.htaccess"],
-      [".env.example", "api/.env.example"],
-      ["paymob.php", "api/paymob.php"],
-      ["callback.php", "api/callback.php"],
-      ["verify.php", "api/verify.php"],
-      ["vodafone.php", "api/vodafone.php"],
-      ["upload.php", "api/upload.php"],
-      ["lib/bootstrap.php", "api/lib/bootstrap.php"],
-      ["lib/firestore.php", "api/lib/firestore.php"],
-      ["data/.htaccess", "api/data/.htaccess"],
+      ['.htaccess', 'api/.htaccess'],
+      ['.env.example', 'api/.env.example'],
+      ['index.php', 'api/index.php'],
+      ['upload.php', 'api/upload.php'],
+      ['migrate-from-firestore.php', 'api/migrate-from-firestore.php'],
+      ['lib/bootstrap.php', 'api/lib/bootstrap.php'],
+      ['lib/db.php', 'api/lib/db.php'],
+      ['lib/auth.php', 'api/lib/auth.php'],
+      ['lib/payments.php', 'api/lib/payments.php'],
+      ['data/.htaccess', 'api/data/.htaccess'],
     ];
 
     await client.ensureDir(`${remoteRoot}/api/lib`);

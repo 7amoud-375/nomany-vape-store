@@ -34,12 +34,13 @@ $apiDest = Join-Path $staging "api"
 New-Item -ItemType Directory -Path (Join-Path $apiDest "lib")  -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $apiDest "data") -Force | Out-Null
 
-foreach ($f in @(".htaccess", ".env.example", "paymob.php", "callback.php", "verify.php", "vodafone.php")) {
+foreach ($f in @(".htaccess", ".env.example", "index.php", "upload.php", "migrate-from-firestore.php")) {
     Copy-Item (Join-Path $api $f) $apiDest -Force
 }
-Copy-Item (Join-Path $api "lib\bootstrap.php") (Join-Path $apiDest "lib") -Force
-Copy-Item (Join-Path $api "lib\firestore.php") (Join-Path $apiDest "lib") -Force
-Copy-Item (Join-Path $api "data\.htaccess")    (Join-Path $apiDest "data") -Force
+foreach ($f in @("bootstrap.php", "db.php", "auth.php", "payments.php")) {
+    Copy-Item (Join-Path $api "lib\$f") (Join-Path $apiDest "lib") -Force
+}
+Copy-Item (Join-Path $api "data\.htaccess") (Join-Path $apiDest "data") -Force
 
 # --- Zip it with POSIX separators -----------------------------------------
 Add-Type -AssemblyName System.IO.Compression

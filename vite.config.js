@@ -11,7 +11,6 @@ export default defineConfig({
         // code change does not force customers to re-download Firebase.
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
-          firebase: ['firebase/app', 'firebase/firestore', 'firebase/auth'],
           motion: ['framer-motion'],
         },
       },

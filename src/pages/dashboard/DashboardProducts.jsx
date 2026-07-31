@@ -104,7 +104,7 @@ const DashboardProducts = () => {
   };
 
   const handleMarkAlertsSent = async () => {
-    const ids = alertsModal.alerts.map((a) => a.firebaseDocId);
+    const ids = alertsModal.alerts.map((a) => a.id);
     await resolveStockAlerts(ids);
     setAlertsModal({ open: false, product: null, loading: false, alerts: [] });
   };
@@ -259,7 +259,7 @@ const DashboardProducts = () => {
           <div className="space-y-4">
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {alertsModal.alerts.map((alert) => (
-                <div key={alert.firebaseDocId} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
+                <div key={alert.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
                   <span className="text-sm font-medium text-gray-900 dark:text-white">{alert.contact}</span>
                   {isPhoneContact(alert.contact) ? (
                     <a

@@ -7,19 +7,12 @@ export const SITE_URL = `https://${SITE_DOMAIN}`;
  * not linked from anywhere on the site.
  *
  * Treat this as one less thing to stumble across, not as a security control:
- * the password is what actually protects the dashboard, and firestore.rules
- * protects the data even if someone finds this URL.
+ * the password is what actually protects the dashboard, and the API rejects
+ * unauthenticated requests even if someone finds this URL.
  *
  * Change the value here if you ever want a different address.
  */
 export const ADMIN_LOGIN_PATH = "/nomany-control-8821";
-
-/**
- * Firebase Auth identifies accounts by email, but the admin signs in with a
- * username. Usernames are mapped onto this internal domain, which is never
- * used to send mail.
- */
-export const ADMIN_EMAIL_DOMAIN = "nomany-admin.local";
 
 export const LOCAL_STORAGE_KEYS = {
   CART: "vapestore_cart",

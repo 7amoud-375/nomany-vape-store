@@ -66,7 +66,7 @@ function App() {
           <Route path={ADMIN_LOGIN_PATH} element={<AdminLoginPage />} />
 
           {/* Dashboard — DashboardLayout gates on the admin role, and
-              firestore.rules enforces it again server-side. */}
+              the API rejects unauthenticated writes regardless. */}
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardOverview />} />
             <Route path="products" element={<DashboardProducts />} />
