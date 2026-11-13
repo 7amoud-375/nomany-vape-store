@@ -1,7 +1,138 @@
 import { useState } from "react";
-import { ImageIcon, ChevronDown, Image as ImageIco, Type, Tags, Wallet, Sparkles } from "lucide-react";
+import { ImageIcon, ChevronDown, Image as ImageIco, Type, Tags, Wallet, Sparkles, Droplet, X } from "lucide-react";
 import MultiImageUploader from "./MultiImageUploader";
 import { toNumber, calculateDiscount } from "../../utils";
+
+const MAX_FLAVORS = 30;
+
+/**
+ * A legacy flavour could be a plain string, from before this field carried
+ * two names. Normalised the same way everywhere it is read, so the rest of
+ * the form only ever deals with the {nameAr, nameEn} shape.
+ */
+const asFlavorObject = (flavor) =>
+  typeof flavor === "string" ? { nameAr: flavor, nameEn: "" } : flavor || { nameAr: "", nameEn: "" };
+
+/**
+ * Optional flavour names for an e-liquid or disposable — "مانجو آيس" /
+ * "Mango Ice". Both languages are captured, the same as a product's own name,
+ * so the flavour reads correctly regardless of which language a visitor is
+ * browsing in.
+ *
+ * Entirely opt-in: a device or an accessory has none, and an empty list is a
+ * complete, valid product. Typed one at a time into their own fields rather
+ * than a single comma-separated box, so a name that itself contains a comma
+ * is never split apart and the two languages can never be transposed.
+ */
+const FlavorInput = ({ flavors, onChange, isRtl }) => {
+  const [draftAr, setDraftAr] = useState("");
+  const [draftEn, setDraftEn] = useState("");
+  const list = (Array.isArray(flavors) ? flavors : []).map(asFlavorObject);
+
+  const add = () => {
+    const nameAr = draftAr.trim();
+    const nameEn = draftEn.trim();
+    if (!nameAr && !nameEn) return;
+
+    if (list.length >= MAX_FLAVORS) {
+      setDraftAr("");
+      setDraftEn("");
+      return;
+    }
+    // Case-insensitive dedupe against either language: "Mint" typed twice, or
+    // typed once in Arabic and once as "mint", is one flavour either way.
+    const clashes = (existing) =>
+      (nameAr && existing.nameAr.toLowerCase() === nameAr.toLowerCase()) ||
+      (nameEn && existing.nameEn.toLowerCase() === nameEn.toLowerCase());
+    if (list.some(clashes)) {
+      setDraftAr("");
+      setDraftEn("");
+      return;
+    }
+
+    onChange([...list, { nameAr, nameEn }]);
+    setDraftAr("");
+    setDraftEn("");
+  };
+
+  const removeAt = (index) => onChange(list.filter((_, i) => i !== index));
+
+  const onEnter = (e) => {
+    // Enter adds without submitting the surrounding product form.
+    if (e.key === "Enter") {
+      e.preventDefault();
+      add();
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="text"
+          value={draftAr}
+          onChange={(e) => setDraftAr(e.target.value)}
+          onKeyDown={onEnter}
+          placeholder={isRtl ? "اسم النكهة (عربي)، مثلاً مانجو آيس" : "Flavour name (Arabic)"}
+          className="input-field flex-1"
+        />
+        <input
+          type="text"
+          value={draftEn}
+          onChange={(e) => setDraftEn(e.target.value)}
+          onKeyDown={onEnter}
+          placeholder={isRtl ? "اسم النكهة (English)" : "Flavour name (English), e.g. Mango Ice"}
+          className="input-field flex-1"
+          dir="ltr"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={(!draftAr.trim() && !draftEn.trim()) || list.length >= MAX_FLAVORS}
+          className="shrink-0 rounded-xl bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary
+                     transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isRtl ? "إضافة" : "Add"}
+        </button>
+      </div>
+
+      {list.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {list.map((flavor, index) => {
+            // Both names shown together regardless of the dashboard's own
+            // language, so the admin can always confirm both were actually
+            // entered rather than one being silently blank.
+            const label = [flavor.nameAr, flavor.nameEn].filter(Boolean).join(" / ") || "—";
+            return (
+              <span
+                key={`${flavor.nameAr}-${flavor.nameEn}-${index}`}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 dark:bg-slate-800
+                           py-1 ps-3 pe-1.5 text-sm text-gray-700 dark:text-gray-200"
+              >
+                {label}
+                <button
+                  type="button"
+                  onClick={() => removeAt(index)}
+                  aria-label={isRtl ? `حذف ${label}` : `Remove ${label}`}
+                  className="rounded-full p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600
+                             dark:hover:bg-slate-700 dark:hover:text-gray-300"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400">
+          {isRtl
+            ? "اختياري — لو المنتج ليكويد أو ديسبوزابل بأكتر من طعم، ضيفهم هنا بالعربي والإنجليزي."
+            : "Optional — if this is an e-liquid or disposable with more than one flavour, add them here in both languages."}
+        </p>
+      )}
+    </div>
+  );
+};
 
 /**
  * Add/edit product form.
@@ -59,6 +190,17 @@ const ProductForm = ({
   const isRtl = language === "ar";
   const set = (key) => (e) => setFormData((p) => ({ ...p, [key]: e.target.value }));
   const toggle = (key) => (e) => setFormData((p) => ({ ...p, [key]: e.target.checked }));
+
+  /**
+   * Foreign keys, stored as numbers.
+   *
+   * A <select> value is always a string, but the API returns category and brand
+   * as integers. Keeping the string meant `product.category === category` was
+   * false everywhere it is compared strictly — related products, the dashboard's
+   * category column — until the next reload replaced the value from the server.
+   */
+  const setId = (key) => (e) =>
+    setFormData((p) => ({ ...p, [key]: e.target.value === "" ? null : Number(e.target.value) }));
 
   const imageCount = (formData.images || []).filter(Boolean).length;
   const discount = calculateDiscount(formData.price, formData.discountPrice);
@@ -155,15 +297,30 @@ const ProductForm = ({
 
         <Section icon={Tags} title={isRtl ? "التصنيف" : "Classification"}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/*
+              Both selects previously had no placeholder option. With
+              formData.category still "", no <option> matched, so the browser
+              displayed the first category while the form value stayed empty —
+              the admin saw "Vapes" selected, saved, and the product landed with
+              no category at all. An explicit empty option makes the unset state
+              visible, and `required` stops it being saved by accident.
+            */}
             <Field label={t("brand")}>
-              <select value={formData.brand || ""} onChange={set("brand")} className="input-field">
+              <select value={formData.brand ?? ""} onChange={setId("brand")} className="input-field">
+                <option value="">{isRtl ? "بدون ماركة" : "No brand"}</option>
                 {brands.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </Field>
             <Field label={t("category")}>
-              <select value={formData.category || ""} onChange={set("category")} className="input-field">
+              <select
+                required
+                value={formData.category ?? ""}
+                onChange={setId("category")}
+                className="input-field"
+              >
+                <option value="">{isRtl ? "اختر القسم…" : "Choose a category…"}</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{isRtl ? c.nameAr : c.nameEn}</option>
                 ))}
@@ -173,6 +330,18 @@ const ProductForm = ({
           <Field label="SKU">
             <input value={formData.sku || ""} onChange={set("sku")} className="input-field" dir="ltr" />
           </Field>
+        </Section>
+
+        <Section
+          icon={Droplet}
+          title={isRtl ? "النكهات (اختياري)" : "Flavours (optional)"}
+          badge={(formData.flavors?.length ?? 0) > 0 ? `${formData.flavors.length}` : undefined}
+        >
+          <FlavorInput
+            flavors={formData.flavors}
+            onChange={(flavors) => setFormData((p) => ({ ...p, flavors }))}
+            isRtl={isRtl}
+          />
         </Section>
 
         <Section icon={Sparkles} title={isRtl ? "الظهور في الموقع" : "Placement on the site"}>
@@ -207,15 +376,31 @@ const ProductForm = ({
         </Section>
       </div>
 
-      {/* Sticky so Save is reachable without scrolling to the bottom. */}
-      <div className="flex gap-3 pt-4 mt-2 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <button type="submit" className="btn-primary flex-1">
+      {/*
+        Sticky so Save is reachable without scrolling to the bottom.
+
+        Matches the modal shell's own background (Modal.jsx: dark:bg-slate-800)
+        exactly. This was one shade darker (slate-900), which on a dark modal
+        card reads as a separate black box stuck to the bottom rather than part
+        of the same panel.
+      */}
+      <div className="flex gap-3 pt-4 mt-2 border-t border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+        <button type="submit" className="btn-primary flex-1 active:scale-[0.98]">
           {isEdit ? (isRtl ? "حفظ التعديلات" : "Save changes") : (isRtl ? "إضافة المنتج" : "Add product")}
         </button>
+        {/*
+          The panel's own background is dark:bg-slate-800 (matched to the
+          modal shell above). Cancel's hover used to target that same shade,
+          so hovering in dark mode changed nothing visible — a border plus a
+          lighter hover fill gives it a real, visible state in both themes.
+        */}
         <button
           type="button"
           onClick={onCancel}
-          className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+          className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 dark:border-slate-600
+                     text-gray-600 dark:text-gray-300 hover:bg-gray-100 hover:border-gray-300
+                     dark:hover:bg-slate-700 dark:hover:border-slate-500
+                     active:scale-[0.98] transition-all duration-150"
         >
           {t("cancel")}
         </button>

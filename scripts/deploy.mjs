@@ -94,7 +94,10 @@ try {
       ['.env.example', 'api/.env.example'],
       ['index.php', 'api/index.php'],
       ['upload.php', 'api/upload.php'],
-      ['migrate-from-firestore.php', 'api/migrate-from-firestore.php'],
+      ['sitemap.php', 'api/sitemap.php'],
+      // migrate-from-firestore.php is deliberately absent: it is a one-off
+      // importer, not part of the running site. Upload it by hand if you ever
+      // need it, then delete it from the server again.
       ['lib/bootstrap.php', 'api/lib/bootstrap.php'],
       ['lib/db.php', 'api/lib/db.php'],
       ['lib/auth.php', 'api/lib/auth.php'],

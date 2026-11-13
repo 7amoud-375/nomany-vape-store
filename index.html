@@ -2,9 +2,46 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vape Store</title>
+
+    <!-- Arabic is the default; LanguageContext rewrites lang/dir when the
+         visitor switches, so this is only the pre-hydration state. -->
+    <title>النعماني ستور | أجهزة الفيب والليكويد في مصر</title>
+    <meta
+      name="description"
+      content="النعماني ستور - وجهتك الأولى لأجهزة الفيب والليكويد الأصلية في مصر. توصيل لكل المحافظات ودفع عند الاستلام."
+    />
+    <link rel="canonical" href="https://nomany-vape-store.com/" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#004741" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+
+    <!-- The stylesheet pulls Google Fonts via @import, which cannot start until
+         the CSS itself has parsed. Warming the connections here removes a round
+         trip from that chain, which is otherwise on the critical path to LCP. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="النعماني ستور" />
+    <meta property="og:title" content="النعماني ستور | أجهزة الفيب والليكويد في مصر" />
+    <meta
+      property="og:description"
+      content="أجهزة فيب وليكويد أصلية، توصيل لكل المحافظات ودفع عند الاستلام."
+    />
+    <meta property="og:url" content="https://nomany-vape-store.com/" />
+    <meta property="og:locale" content="ar_EG" />
+    <!-- og:image is deliberately absent rather than pointing at a file that does
+         not exist. Drop a 1200x630 JPG at public/og-image.jpg and add:
+         <meta property="og:image" content="https://nomany-vape-store.com/og-image.jpg" /> -->
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="النعماني ستور" />
+    <meta
+      name="twitter:description"
+      content="أجهزة فيب وليكويد أصلية، توصيل لكل المحافظات ودفع عند الاستلام."
+    />
   </head>
   <body>
     <div id="root"></div>

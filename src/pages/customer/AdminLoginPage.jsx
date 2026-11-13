@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Lock, User, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertCircle, Lock, User, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 import Logo from "../../components/common/Logo";
@@ -22,6 +22,10 @@ const AdminLoginPage = () => {
   const [form, setForm] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Held on the form rather than only in a toast: a toast disappears after a
+  // few seconds, and "did it even try?" is the worst thing a login can leave
+  // you wondering.
+  const [error, setError] = useState("");
 
   // Already signed in? Skip the form.
   useEffect(() => {
@@ -30,9 +34,41 @@ const AdminLoginPage = () => {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
+  /**
+   * The API answers in English. Map the cases worth distinguishing to the
+   * visitor's language, and fall back to whatever the server said rather than
+   * swallowing an unexpected error behind a generic string.
+   */
+  const localiseError = (message) => {
+    const text = String(message || "");
+
+    if (/wrong username or password/i.test(text)) {
+      return isRtl
+        ? "اسم المستخدم أو كلمة المرور غير صحيحة"
+        : "Wrong username or password";
+    }
+    if (/too many requests/i.test(text)) {
+      return isRtl
+        ? "محاولات كتير. استنى شوية وجرّب تاني."
+        : "Too many attempts. Wait a moment and try again.";
+    }
+    if (/not configured|server is not/i.test(text)) {
+      return isRtl
+        ? "السيرفر مش متظبط. راجع ملف api/.env."
+        : "The server is not configured. Check api/.env.";
+    }
+    if (/could not reach|unexpected response/i.test(text)) {
+      return isRtl
+        ? "تعذر الوصول للسيرفر. اتأكد من الاتصال."
+        : "Could not reach the server. Check your connection.";
+    }
+    return text || (isRtl ? "تعذر تسجيل الدخول" : "Could not sign in");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setError("");
 
     const result = await login(form.username, form.password);
 
@@ -40,7 +76,11 @@ const AdminLoginPage = () => {
       toast.success(isRtl ? "أهلاً بيك" : "Welcome back");
       navigate("/dashboard", { replace: true });
     } else {
-      toast.error(result.error);
+      const message = localiseError(result.error);
+      setError(message);
+      toast.error(message);
+      // Clear only the password — retyping the username every attempt is
+      // needless friction when the username is usually the part that is right.
       setForm((prev) => ({ ...prev, password: "" }));
     }
 
@@ -69,6 +109,26 @@ const AdminLoginPage = () => {
           onSubmit={handleSubmit}
           className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-800 p-8 space-y-5"
         >
+          {/* role="alert" so a screen reader announces the failure instead of
+              the form silently resetting the password field. */}
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                key={error}
+                role="alert"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm
+                           text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </motion.p>
+            )}
+          </AnimatePresence>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {isRtl ? "اسم المستخدم" : "Username"}

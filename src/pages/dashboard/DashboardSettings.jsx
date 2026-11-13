@@ -8,6 +8,10 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  MapPin,
+  Plus,
+  Trash2,
+  Wallet,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
@@ -21,6 +25,26 @@ import toast from "react-hot-toast";
 // Store name, hashtag, address and footer text were removed at the owner's
 // request — they are set once and never change, so they only added noise. The
 // values still live in src/data/settings.js and still render on the site.
+// Manual transfer details, shown to the customer at checkout when they pick
+// instapay/vodafone_cash. Free text on purpose — a phone number, an InstaPay
+// link, or an InstaPay Business QR link all just get displayed as-is.
+const PAYMENT_FIELDS = [
+  {
+    key: "instapayNumber",
+    labelAr: "رقم / رابط انستا باي",
+    labelEn: "InstaPay number / link",
+    dir: "ltr",
+    placeholder: "01xxxxxxxxx or instapay.me/...",
+  },
+  {
+    key: "vodafoneCashNumber",
+    labelAr: "رقم فودافون كاش",
+    labelEn: "Vodafone Cash number",
+    dir: "ltr",
+    placeholder: "01xxxxxxxxx",
+  },
+];
+
 const CONTACT_FIELDS = [
   { key: "businessHoursAr", labelAr: "ساعات العمل (عربي)", labelEn: "Business Hours (Arabic)" },
   { key: "businessHoursEn", labelAr: "ساعات العمل (English)", labelEn: "Business Hours (English)" },
@@ -31,6 +55,172 @@ const CONTACT_FIELDS = [
   { key: "instagram", labelAr: "انستغرام", labelEn: "Instagram", dir: "ltr", placeholder: "https://instagram.com/..." },
   { key: "tiktok", labelAr: "تيك توك", labelEn: "TikTok", dir: "ltr", placeholder: "https://tiktok.com/@..." },
 ];
+
+/**
+ * The areas the shop delivers to, each with its own fee — the same idea as
+ * the reference café project, extended to carry both an Arabic and an
+ * English name since the storefront itself is bilingual.
+ *
+ * Editing here is local to the form; nothing is sent until the page's own
+ * Save button is pressed, and DashboardSettings validates the whole list
+ * (duplicate names, negative fees) before that save goes out.
+ */
+/**
+ * Delivery areas: a small "add one" form, and a distinct list of the areas
+ * already added below it — the same add-then-list shape as the product
+ * form's flavour field, rather than an undifferentiated stack of always-
+ * editable rows where a blank "new" row looked identical to a saved one.
+ *
+ * Adding still only changes local state; nothing reaches the server until
+ * the page's own Save button is pressed, same as every other settings tab.
+ */
+const DeliveryAreasEditor = ({ isRtl, cities, onChange }) => {
+  const rows = Array.isArray(cities) ? cities : [];
+  const [draftAr, setDraftAr] = useState("");
+  const [draftEn, setDraftEn] = useState("");
+  const [draftFee, setDraftFee] = useState("");
+
+  const addRow = () => {
+    const nameAr = draftAr.trim();
+    const nameEn = draftEn.trim();
+    const fee = toNumber(draftFee);
+
+    if (!nameAr && !nameEn) {
+      toast.error(isRtl ? "اكتب اسم المنطقة بلغة واحدة على الأقل" : "Enter the area's name in at least one language");
+      return;
+    }
+    if (!Number.isFinite(fee) || fee < 0) {
+      toast.error(isRtl ? "سعر التوصيل لازم يكون صفر أو أكتر" : "The delivery fee must be zero or more");
+      return;
+    }
+    const clashes = (existing) =>
+      (nameAr && (existing.nameAr || "").toLowerCase() === nameAr.toLowerCase()) ||
+      (nameEn && (existing.nameEn || "").toLowerCase() === nameEn.toLowerCase());
+    if (rows.some(clashes)) {
+      toast.error(
+        isRtl ? `في منطقة بنفس الاسم متسجلة خلاص: "${nameAr || nameEn}"` : `An area named "${nameAr || nameEn}" is already added`
+      );
+      return;
+    }
+
+    onChange([...rows, { nameAr, nameEn, fee }]);
+    setDraftAr("");
+    setDraftEn("");
+    setDraftFee("");
+  };
+
+  const removeRow = (index) => onChange(rows.filter((_, i) => i !== index));
+
+  const onEnter = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addRow();
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-2">
+        <MapPin className="h-4 w-4 text-primary" />
+        <h3 className="font-bold text-gray-900 dark:text-white">
+          {isRtl ? "مناطق التوصيل" : "Delivery areas"}
+        </h3>
+      </div>
+      <p className="mb-5 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+        {isRtl
+          ? "العميل بيختار واحدة من المناطق دي في صفحة الدفع، وسعرها بيتضاف على الإجمالي تلقائيًا. الطلب متقدرش يتأكد من غير ما يتختار منطقة."
+          : "The customer picks one of these at checkout, and its fee is added to the total automatically. An order cannot be placed without choosing an area."}
+      </p>
+
+      {/* Add one area at a time. */}
+      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40 sm:flex-row sm:items-center">
+        <input
+          value={draftAr}
+          onChange={(e) => setDraftAr(e.target.value)}
+          onKeyDown={onEnter}
+          placeholder={isRtl ? "اسم المنطقة (عربي)" : "Area name (Arabic)"}
+          className="input-field flex-1 text-sm"
+        />
+        <input
+          value={draftEn}
+          onChange={(e) => setDraftEn(e.target.value)}
+          onKeyDown={onEnter}
+          placeholder={isRtl ? "اسم المنطقة (English)" : "Area name (English)"}
+          className="input-field flex-1 text-sm"
+          dir="ltr"
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={draftFee}
+              onChange={(e) => setDraftFee(e.target.value)}
+              onKeyDown={onEnter}
+              placeholder="0"
+              className="input-field w-20 text-sm"
+              dir="ltr"
+            />
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+              {isRtl ? "ج.م" : "EGP"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={addRow}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-4 py-2.5
+                       text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            <Plus className="h-4 w-4" />
+            {isRtl ? "إضافة" : "Add"}
+          </button>
+        </div>
+      </div>
+
+      {/* The areas already added — what checkout will actually offer once saved. */}
+      <div className="mt-5">
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {isRtl ? `المناطق المضافة (${rows.length})` : `Added areas (${rows.length})`}
+        </h4>
+
+        {rows.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-gray-300 dark:border-slate-700 px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            {isRtl
+              ? "لسه مفيش مناطق توصيل. العملاء متقدرش يكملوا الطلب لحد ما تضيف واحدة وتحفظ."
+              : "No delivery areas yet. Customers cannot check out until you add one and save."}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((row, index) => (
+              <div
+                key={`${row.nameAr}-${row.nameEn}-${index}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-2.5 dark:border-slate-700"
+              >
+                <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
+                  {[row.nameAr, row.nameEn].filter(Boolean).join(" / ") || "—"}
+                </span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="text-sm font-semibold text-primary" dir="ltr">
+                    {toNumber(row.fee)} {isRtl ? "ج.م" : "EGP"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(index)}
+                    aria-label={isRtl ? "حذف المنطقة" : "Remove area"}
+                    className="rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const DashboardSettings = () => {
   const { language } = useLanguage();
@@ -51,8 +241,40 @@ const DashboardSettings = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Every tab shares one save, so the delivery list is always validated here
+    // regardless of which tab is on screen — the same way the contact and
+    // return-policy fields already are.
+    const cleanedCities = (formData.deliveryCities || [])
+      .map((c) => ({
+        nameAr: String(c?.nameAr ?? "").trim(),
+        nameEn: String(c?.nameEn ?? "").trim(),
+        fee: toNumber(c?.fee),
+      }))
+      .filter((c) => c.nameAr || c.nameEn);
+
+    if (cleanedCities.some((c) => !Number.isFinite(c.fee) || c.fee < 0)) {
+      toast.error(
+        isRtl ? "كل منطقة لازم يكون ليها سعر توصيل صفر أو أكتر" : "Every area needs a delivery fee of zero or more"
+      );
+      return;
+    }
+    const seen = new Set();
+    for (const c of cleanedCities) {
+      const key = (c.nameAr || c.nameEn).toLowerCase();
+      if (seen.has(key)) {
+        toast.error(
+          isRtl
+            ? `في أكتر من منطقة بنفس الاسم: "${c.nameAr || c.nameEn}"`
+            : `More than one area is named "${c.nameAr || c.nameEn}"`
+        );
+        return;
+      }
+      seen.add(key);
+    }
+
     setSaving(true);
-    updateSettings({ ...formData, shippingCost: toNumber(formData.shippingCost) });
+    updateSettings({ ...formData, deliveryCities: cleanedCities });
     setSaving(false);
   };
 
@@ -63,7 +285,8 @@ const DashboardSettings = () => {
 
   const tabs = [
     { id: "contact", icon: Share2, labelAr: "التواصل", labelEn: "Contact" },
-    { id: "shipping", icon: Truck, labelAr: "الشحن", labelEn: "Shipping" },
+    { id: "shipping", icon: Truck, labelAr: "مناطق التوصيل", labelEn: "Delivery areas" },
+    { id: "payment", icon: Wallet, labelAr: "الدفع", labelEn: "Payment" },
     { id: "returns", icon: RotateCcw, labelAr: "سياسة الاسترجاع", labelEn: "Returns" },
     { id: "account", icon: KeyRound, labelAr: "حسابي", labelEn: "Account" },
   ];
@@ -79,7 +302,7 @@ const DashboardSettings = () => {
             onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
               tab === id
-                ? "bg-primary text-white shadow-sm"
+                ? "bg-primary text-on-primary shadow-sm"
                 : "bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 border border-gray-100 dark:border-slate-800"
             }`}
           >
@@ -122,24 +345,35 @@ const DashboardSettings = () => {
             ))}
 
           {tab === "shipping" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {isRtl ? "تكلفة الشحن (ج.م)" : "Shipping Cost (EGP)"}
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                {...field("shippingCost")}
-                className="input-field"
-                placeholder="80"
-              />
-              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+            <DeliveryAreasEditor
+              isRtl={isRtl}
+              cities={formData?.deliveryCities}
+              onChange={(deliveryCities) => setFormData((p) => ({ ...p, deliveryCities }))}
+            />
+          )}
+
+          {tab === "payment" && (
+            <>
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
                 {isRtl
-                  ? "بيتضاف تلقائيًا لإجمالي كل طلب. سيرفر الدفع بيقرأ الرقم ده كمان، فلازم تحفظ الصفحة دي مرة على الأقل عشان الدفع الإلكتروني يحسب الشحن صح."
-                  : "Added automatically to every order total. The payment server reads this value too, so save this page at least once or card payments will bill without shipping."}
+                  ? "الرقم/الرابط ده بيظهر للعميل في صفحة الدفع لما يختار الطريقة دي، عشان يحول بنفسه ويبعتلك الإيصال."
+                  : "This is shown to the customer at checkout when they pick this method, so they can transfer themselves and send you the receipt."}
               </p>
-            </div>
+              {PAYMENT_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {isRtl ? f.labelAr : f.labelEn}
+                  </label>
+                  <input
+                    type="text"
+                    dir={f.dir}
+                    placeholder={f.placeholder}
+                    {...field(f.key)}
+                    className="input-field"
+                  />
+                </div>
+              ))}
+            </>
           )}
 
           {tab === "returns" && (

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
 import { Heart, ShoppingBag } from "lucide-react";
@@ -6,7 +6,7 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useCart } from "../../context/CartContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, effectivePrice, productImage } from "../../utils";
+import { formatPrice, effectivePrice, productImage, hasFlavors } from "../../utils";
 import Button from "../../components/ui/Button";
 
 const PLACEHOLDER = "https://placehold.co/200x200/004741/FFFFFF?text=%20";
@@ -15,6 +15,7 @@ const WishlistPage = () => {
   const { language } = useLanguage();
   const { wishlist, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
+  const navigate = useNavigate();
   const { t } = useTranslations();
 
   if (wishlist.length === 0) {
@@ -73,14 +74,19 @@ const WishlistPage = () => {
                 </p>
 
                 <div className="flex gap-2">
+                  {/* A liquid needs its flavour chosen on the product page. */}
                   <Button
-                    onClick={() => addToCart(item)}
+                    onClick={() =>
+                      hasFlavors(item) ? navigate(`/products/${item.id}`) : addToCart(item)
+                    }
                     disabled={!item.availability}
                     size="sm"
                     className="flex-1"
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    {t("addToCart")}
+                    {hasFlavors(item)
+                      ? language === "ar" ? "اختر الطعم" : "Choose flavour"
+                      : t("addToCart")}
                   </Button>
                   <Button
                     variant="outline"

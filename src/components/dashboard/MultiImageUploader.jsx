@@ -1,9 +1,9 @@
 import { useState, useRef } from "react";
-import { Upload, X, Loader2, Star, Link2, GripVertical } from "lucide-react";
+import { Upload, X, Loader2, Star } from "lucide-react";
 import { uploadProductImage } from "../../services/storageService";
 import toast from "react-hot-toast";
 
-const MAX_IMAGES = 6;
+const MAX_IMAGES = 30;
 
 /**
  * Manages a product's image list.
@@ -15,7 +15,6 @@ const MAX_IMAGES = 6;
 const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
   const isRtl = language === "ar";
   const [uploading, setUploading] = useState(false);
-  const [urlDraft, setUrlDraft] = useState("");
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
 
@@ -70,21 +69,6 @@ const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
     onChange([picked, ...next]);
   };
 
-  const addUrl = () => {
-    const url = urlDraft.trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) {
-      toast.error(isRtl ? "الرابط لازم يبدأ بـ http أو /" : "URL must start with http or /");
-      return;
-    }
-    if (list.length >= MAX_IMAGES) {
-      toast.error(isRtl ? `الحد الأقصى ${MAX_IMAGES} صور` : `Maximum ${MAX_IMAGES} images`);
-      return;
-    }
-    onChange([...list, url]);
-    setUrlDraft("");
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -97,7 +81,18 @@ const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
       </div>
 
       {list.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+        /*
+         * Own scroll region, capped height, and more columns than the old
+         * six-image layout — at up to 30 thumbnails an uncapped grid grew tall
+         * enough to shove the rest of the modal's fields far below the fold the
+         * moment this section was open. Contained in a bordered tray instead, so
+         * it reads as one scrollable shelf regardless of how many photos exist.
+         */
+        <div
+          className="grid grid-cols-4 gap-2 rounded-xl border border-gray-100 dark:border-slate-800
+                     bg-gray-50/60 p-2 sm:grid-cols-5 md:grid-cols-6
+                     max-h-72 overflow-y-auto dark:bg-slate-800/40"
+        >
           {list.map((src, index) => (
             <div
               key={`${src}-${index}`}
@@ -109,8 +104,14 @@ const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
             >
               <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
 
+              {/* Position among the set, so reordering a long list stays legible
+                  without opening the lightbox to count. */}
+              <span className="absolute top-1 end-1 rounded-md bg-black/50 px-1 text-[9px] font-medium text-white">
+                {index + 1}
+              </span>
+
               {index === 0 && (
-                <span className="absolute bottom-1 start-1 px-1.5 py-0.5 rounded-md bg-primary text-white text-[10px] font-medium">
+                <span className="absolute bottom-1 start-1 px-1.5 py-0.5 rounded-md bg-primary text-on-primary text-[10px] font-medium">
                   {isRtl ? "رئيسية" : "Main"}
                 </span>
               )}
@@ -195,31 +196,6 @@ const MultiImageUploader = ({ images = [], onChange, language = "ar" }) => {
         }}
         className="hidden"
       />
-
-      <div className="flex items-center gap-2">
-        <Link2 className="w-4 h-4 text-gray-400 shrink-0" />
-        <input
-          type="text"
-          value={urlDraft}
-          onChange={(e) => setUrlDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addUrl();
-            }
-          }}
-          placeholder={isRtl ? "أو الصق رابط صورة" : "Or paste an image URL"}
-          className="input-field flex-1 py-1.5 text-sm"
-          dir="ltr"
-        />
-        <button
-          type="button"
-          onClick={addUrl}
-          className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors shrink-0"
-        >
-          {isRtl ? "إضافة" : "Add"}
-        </button>
-      </div>
     </div>
   );
 };

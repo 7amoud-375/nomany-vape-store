@@ -21,10 +21,14 @@ const CategoryPage = () => {
   const category = categories.find((c) => String(c.id) === String(id));
   const categoryProducts = products.filter((p) => String(p.category) === String(id));
 
+  // A missing category and an empty category are different problems, and the
+  // page used to report both as "No products found".
   if (!category) {
     return (
       <div className="pt-32 pb-20 text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{t("noProducts")}</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+          {language === "ar" ? "القسم ده مش موجود" : "That category does not exist"}
+        </h2>
         <Link to="/categories" className="btn-primary">{t("back")}</Link>
       </div>
     );
@@ -33,6 +37,20 @@ const CategoryPage = () => {
   return (
     <div className="relative overflow-hidden pt-24 pb-20">
       <SectionDecoration variant="arcs" position="top-end" size="w-72 h-72" tone="text-primary" />
+      <SectionDecoration
+        variant="bubbles"
+        position="mid-start"
+        size="w-40 h-64"
+        tone="text-accent"
+        motion="none"
+      />
+      <SectionDecoration
+        variant="plume"
+        position="bottom-end"
+        size="w-64 h-80"
+        tone="text-primary"
+        motion="none"
+      />
       <div className="container-custom">
         <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-8">
           <Link to="/" className="hover:text-primary">{language === "ar" ? "الرئيسية" : "Home"}</Link>
@@ -49,7 +67,14 @@ const CategoryPage = () => {
           subtitle={language === "ar" ? category.descriptionAr : category.descriptionEn}
         />
 
-        <ProductGrid products={categoryProducts} />
+        <ProductGrid
+          products={categoryProducts}
+          emptyMessage={
+            language === "ar"
+              ? "لسه مفيش منتجات في القسم ده"
+              : "No products in this category yet"
+          }
+        />
       </div>
     </div>
   );

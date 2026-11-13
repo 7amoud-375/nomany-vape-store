@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Package, Grid3X3, Tag, Percent,
-  ShoppingCart, BarChart3, Settings, LogOut, Menu, X, Store,
+  ShoppingCart, BarChart3, Settings, LogOut, Menu, X, Store, BellRing,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useAuth } from "../../context/AuthContext";
@@ -19,6 +19,7 @@ const iconMap = {
   brands: Tag,
   offers: Percent,
   orders: ShoppingCart,
+  stockAlerts: BellRing,
   analytics: BarChart3,
   settings: Settings,
 };
@@ -72,7 +73,7 @@ const DashboardSidebar = () => {
         <button
           onClick={() => setIsMobileOpen(true)}
           aria-label={language === "ar" ? "فتح القائمة" : "Open menu"}
-          className={`lg:hidden fixed top-3 z-[60] p-2.5 rounded-xl bg-primary text-white shadow-lg
+          className={`lg:hidden fixed top-3 z-[60] p-2.5 rounded-xl bg-primary-dark text-white shadow-lg
                       active:scale-95 transition-transform ${isRTL ? "right-4" : "left-4"}`}
         >
           <Menu className="w-5 h-5" />
@@ -93,8 +94,12 @@ const DashboardSidebar = () => {
       </AnimatePresence>
 
       <aside
+        // primary-dark rather than primary: this is a dark chrome panel whose
+        // children are all white, and the dark theme flips `primary` to a light
+        // mint that white would vanish against. primary-dark stays a deep
+        // Cyprus in both themes (#002f2a / #005049).
         className={`fixed top-0 bottom-0 w-64 z-[56] flex flex-col justify-between
-                    bg-primary text-white transition-transform duration-300 ease-out lg:translate-x-0 ${
+                    bg-primary-dark text-white transition-transform duration-300 ease-out lg:translate-x-0 ${
                       isRTL
                         ? `right-0 border-l border-accent/10 ${isMobileOpen ? "translate-x-0" : "translate-x-full"}`
                         : `left-0 border-r border-accent/10 ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}`

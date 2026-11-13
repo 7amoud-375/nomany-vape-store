@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import SectionDecoration from "../../components/common/SectionDecoration";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, X, PackageSearch, Layers } from "lucide-react";
@@ -11,27 +11,47 @@ import ProductGrid from "../../components/product/ProductGrid";
 
 const SearchPage = () => {
   const { language } = useLanguage();
-  const { products, categories } = useData();
+  const { products, categories, brands } = useData();
   const { t } = useTranslations();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const query = searchParams.get("q") || "";
   const [searchInput, setSearchInput] = useState(query);
 
+  /*
+   * Keep the box in step with the URL.
+   *
+   * useState only reads its initial value on mount, and searching from the
+   * navbar while already on this page does not remount it — so the results
+   * changed while the box still showed the previous term.
+   */
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
   const lowerQuery = query.toLowerCase().trim();
 
   const productResults = useMemo(() => {
-    return searchProducts(products, query, language);
-  }, [products, query, language]);
+    return searchProducts(products, query, language, { categories, brands });
+  }, [products, query, language, categories, brands]);
 
+  /**
+   * Every field is coerced with String() before matching.
+   *
+   * `c.id.toLowerCase()` used to throw here: category ids are integers now that
+   * they come from MySQL, and Number has no toLowerCase. The exception escaped
+   * the render and blanked the whole search page the moment anything was typed.
+   */
   const categoryResults = useMemo(() => {
     if (!lowerQuery) return [];
-    return categories.filter((c) => 
-      c.id?.toLowerCase().includes(lowerQuery) ||
-      c.nameAr?.toLowerCase().includes(lowerQuery) ||
-      c.nameEn?.toLowerCase().includes(lowerQuery) ||
-      c.descriptionAr?.toLowerCase().includes(lowerQuery) ||
-      c.descriptionEn?.toLowerCase().includes(lowerQuery)
+    const has = (value) => String(value ?? "").toLowerCase().includes(lowerQuery);
+
+    return categories.filter(
+      (c) =>
+        has(c.nameAr) ||
+        has(c.nameEn) ||
+        has(c.descriptionAr) ||
+        has(c.descriptionEn)
     );
   }, [categories, lowerQuery]);
 
@@ -53,11 +73,25 @@ const SearchPage = () => {
           subtitle={query ? `${totalResults} ${t("results")}` : t("searchPlaceholder")}
         />
 
-        <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-12">
+        {/*
+          Sticky, so a new search is always one click away no matter how far
+          down the results you have scrolled. The backdrop blur keeps the
+          results legible as they pass underneath.
+        */}
+        <form
+          onSubmit={handleSearch}
+          role="search"
+          className="sticky top-20 z-30 mx-auto mb-12 max-w-2xl rounded-2xl
+                     bg-surface/80 py-2 backdrop-blur-md"
+        >
           <div className="relative">
-            <Search className="absolute start-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute start-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            <label htmlFor="search-again" className="sr-only">
+              {t("searchPlaceholder")}
+            </label>
             <input
-              type="text"
+              id="search-again"
+              type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder={t("searchPlaceholder")}
@@ -67,6 +101,7 @@ const SearchPage = () => {
               <button
                 type="button"
                 onClick={() => { setSearchInput(""); setSearchParams({}); }}
+                aria-label={language === "ar" ? "مسح البحث" : "Clear search"}
                 className="absolute end-4 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
               >
                 <X className="w-5 h-5 text-gray-400" />

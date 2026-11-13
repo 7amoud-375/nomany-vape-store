@@ -42,7 +42,7 @@ class ErrorBoundary extends Component {
           </p>
           <button
             onClick={this.handleReload}
-            className="px-6 py-3 rounded-xl bg-primary text-white font-medium hover:opacity-90 transition-opacity"
+            className="px-6 py-3 rounded-xl bg-primary text-on-primary font-medium hover:opacity-90 transition-opacity"
           >
             {isRtl ? "العودة للرئيسية" : "Back to home"}
           </button>

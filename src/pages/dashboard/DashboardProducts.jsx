@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Pencil, Trash2, Copy, Bell, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, Search, AlertTriangle } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
@@ -14,7 +14,7 @@ import { PageHeader } from "../../components/dashboard/ui";
 
 const DashboardProducts = () => {
   const { language } = useLanguage();
-  const { products, categories, brands, addProduct, updateProduct, deleteProduct, duplicateProduct, fetchStockAlerts, resolveStockAlerts } = useData();
+  const { products, categories, brands, addProduct, updateProduct, deleteProduct, duplicateProduct } = useData();
   const { t } = useTranslations();
 
   const [deleteModal, setDeleteModal] = useState({ open: false, product: null });
@@ -25,41 +25,59 @@ const DashboardProducts = () => {
   // ADDED: Search state
   const [searchQuery, setSearchQuery] = useState("");
 
-  // State for Notify Alerts Modal
-  const [alertsModal, setAlertsModal] = useState({ open: false, product: null, loading: false, alerts: [] });
-
   const emptyProduct = {
     nameAr: "",
     nameEn: "",
     descriptionAr: "",
     descriptionEn: "",
-    brand: brands[0]?.id || "",
-    category: categories[0]?.id || "",
+    // Left unset, not defaulted to the first brand/category: ProductForm's
+    // <select> only shows an unset state when the value is "", and defaulting
+    // here to brands[0]/categories[0] silently assigned every new product to
+    // whichever happened to be first, without the admin ever touching the
+    // dropdown — the exact bug the empty placeholder option was added to
+    // prevent, just from the opposite direction.
+    brand: "",
+    category: "",
     price: "",
     discountPrice: "",
     sku: "",
     images: [],
+    flavors: [],
     availability: true,
     featured: false,
     bestSeller: false,
     offer: false,
     newArrival: false,
-    tags: [],
   };
 
   const [formData, setFormData] = useState(emptyProduct);
 
-  // ADDED: Filter products based on search query
+  /*
+   * `p.brand?.toLowerCase()` used to throw here. Optional chaining only guards
+   * null and undefined — brand is a number now, and Number has no toLowerCase,
+   * so searching crashed the page as soon as any product had a brand. Every
+   * field is coerced, and brand/category match on their names rather than the
+   * numeric id nobody types.
+   */
   const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return products;
-    const lowerQuery = searchQuery.toLowerCase().trim();
-    return products.filter(p => 
-      p.nameAr?.toLowerCase().includes(lowerQuery) ||
-      p.nameEn?.toLowerCase().includes(lowerQuery) ||
-      p.brand?.toLowerCase().includes(lowerQuery) ||
-      p.sku?.toLowerCase().includes(lowerQuery)
+    const needle = searchQuery.toLowerCase().trim();
+    if (!needle) return products;
+
+    const has = (value) => String(value ?? "").toLowerCase().includes(needle);
+    const nameOf = (collection, id, ...fields) => {
+      const row = collection.find((item) => String(item.id) === String(id));
+      return row ? fields.map((f) => row[f]).filter(Boolean).join(" ") : "";
+    };
+
+    return products.filter(
+      (p) =>
+        has(p?.nameAr) ||
+        has(p?.nameEn) ||
+        has(p?.sku) ||
+        has(nameOf(brands, p?.brand, "name")) ||
+        has(nameOf(categories, p?.category, "nameAr", "nameEn"))
     );
-  }, [products, searchQuery]);
+  }, [products, searchQuery, brands, categories]);
 
   const handleAdd = () => {
     setFormData(emptyProduct);
@@ -79,6 +97,19 @@ const DashboardProducts = () => {
       discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
       // Blank slots would render as broken thumbnails on the storefront.
       images: (formData.images || []).filter((src) => typeof src === "string" && src.trim() !== ""),
+      // Optional, bilingual, trimmed the same way — a name typed then deleted
+      // down to whitespace should not survive as an empty chip, and a legacy
+      // single-string flavour (from before this carried two names) is folded
+      // into the same {nameAr, nameEn} shape rather than left inconsistent.
+      flavors: (formData.flavors || [])
+        .map((flavor) => {
+          const shape = typeof flavor === "string" ? { nameAr: flavor, nameEn: "" } : flavor || {};
+          return {
+            nameAr: String(shape.nameAr ?? "").trim(),
+            nameEn: String(shape.nameEn ?? "").trim(),
+          };
+        })
+        .filter((flavor) => flavor.nameAr || flavor.nameEn),
     };
     if (addModal) {
       addProduct(data);
@@ -98,20 +129,40 @@ const DashboardProducts = () => {
     setFormData((p) => ({ ...p, images: [...(p.images || []).filter(Boolean), imageSrc] }));
   };
 
-  const openAlertsModal = async (product) => {
-    setAlertsModal({ open: true, product, loading: true, alerts: [] });
-    const alerts = await fetchStockAlerts(product.id);
-    setAlertsModal({ open: true, product, loading: false, alerts });
+  /*
+   * Products with no category are invisible on every category page, so the
+   * shop looks empty even when the catalogue is full. The old product form
+   * saved an empty category whenever the admin never opened the dropdown, so
+   * there can be a lot of them — fixing that one product at a time before
+   * launch is busywork. This assigns a category to all of them at once.
+   */
+  const uncategorised = useMemo(
+    () =>
+      products.filter(
+        (p) => p?.category === null || p?.category === undefined || p?.category === "" || Number(p.category) === 0
+      ),
+    [products]
+  );
+
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const assignCategoryToAll = async () => {
+    const categoryId = Number(bulkCategory);
+    if (!categoryId) return;
+
+    setBulkBusy(true);
+    try {
+      // Sequential on purpose: shared hosting would rather have a short queue
+      // than fifty simultaneous writes.
+      for (const product of uncategorised) {
+        await updateProduct(product.id, { ...product, category: categoryId });
+      }
+    } finally {
+      setBulkBusy(false);
+      setBulkCategory("");
+    }
   };
-
-  const handleMarkAlertsSent = async () => {
-    const ids = alertsModal.alerts.map((a) => a.id);
-    await resolveStockAlerts(ids);
-    setAlertsModal({ open: false, product: null, loading: false, alerts: [] });
-  };
-
-  const isPhoneContact = (contact) => /^[+\d\s-]+$/.test(contact);
-
 
   return (
     <div>
@@ -136,6 +187,41 @@ const DashboardProducts = () => {
         />
       </div>
 
+      {/* Only appears while there is something to fix. */}
+      {uncategorised.length > 0 && categories.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4
+                        dark:border-amber-900/50 dark:bg-amber-900/20">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-200">
+            {language === "ar"
+              ? `${uncategorised.length} منتج من غير قسم — مش هيظهروا في أي صفحة قسم على الموقع.`
+              : `${uncategorised.length} product${uncategorised.length === 1 ? "" : "s"} have no category — they will not appear on any category page.`}
+          </p>
+
+          <select
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className="input-field w-auto py-2 text-sm"
+            aria-label={language === "ar" ? "اختر القسم" : "Choose a category"}
+          >
+            <option value="">{language === "ar" ? "اختر القسم…" : "Choose a category…"}</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {language === "ar" ? c.nameAr : c.nameEn}
+              </option>
+            ))}
+          </select>
+
+          <Button onClick={assignCategoryToAll} disabled={!bulkCategory || bulkBusy}>
+            {bulkBusy
+              ? language === "ar" ? "جاري الحفظ…" : "Saving…"
+              : language === "ar"
+              ? `عيّن للكل (${uncategorised.length})`
+              : `Assign to all (${uncategorised.length})`}
+          </Button>
+        </div>
+      )}
+
       <CardGrid
         isEmpty={filteredProducts.length === 0}
         empty={
@@ -145,8 +231,10 @@ const DashboardProducts = () => {
         }
       >
         {filteredProducts.map((product, index) => {
-          const brand = brands.find((b) => b.id === product?.brand);
-          const category = categories.find((c) => c.id === product?.category);
+          // Compared as strings: a freshly-saved product carries whatever the
+          // form produced until the next reload replaces it from the server.
+          const brand = brands.find((b) => String(b.id) === String(product?.brand));
+          const category = categories.find((c) => String(c.id) === String(product?.category));
           const discounted = effectivePrice(product) < Number(product?.price);
 
           return (
@@ -162,6 +250,9 @@ const DashboardProducts = () => {
                 product?.availability
                   ? { label: language === "ar" ? "متوفر" : "In stock", className: "bg-green-500/90 text-white" }
                   : { label: language === "ar" ? "نافد" : "Out", className: "bg-red-500/90 text-white" },
+                ...(category
+                  ? []
+                  : [{ label: language === "ar" ? "بدون قسم" : "No category", className: "bg-amber-500/90 text-white" }]),
                 ...(product?.featured ? [{ label: language === "ar" ? "مميز" : "Featured", className: "bg-primary/90 text-white" }] : []),
                 ...((product?.images?.length ?? 0) > 1
                   ? [{ label: `${product.images.length} 🖼`, className: "bg-black/60 text-white" }]
@@ -180,7 +271,9 @@ const DashboardProducts = () => {
               actions={[
                 { icon: Pencil, label: t("edit") || "Edit", tone: "primary", onClick: () => handleEdit(product) },
                 { icon: Copy, label: "Duplicate", onClick: () => duplicateProduct(product) },
-                { icon: Bell, label: "Notify requests", onClick: () => openAlertsModal(product) },
+                // The bell that used to sit here opened a per-product alerts
+                // modal. Dashboard -> Stock alerts now owns that, grouped by
+                // product and updating in real time.
                 { icon: Trash2, label: t("delete") || "Delete", tone: "danger", onClick: () => setDeleteModal({ open: true, product }) },
               ]}
             />
@@ -245,56 +338,6 @@ const DashboardProducts = () => {
         language={language}
       />
 
-      <Modal
-        isOpen={alertsModal.open}
-        onClose={() => setAlertsModal({ open: false, product: null, loading: false, alerts: [] })}
-        title={language === "ar" ? "طلبات التنبيه عند التوفر" : "Notify Requests"}
-        size="md"
-      >
-        {alertsModal.loading ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">{language === "ar" ? "جاري التحميل..." : "Loading..."}</p>
-        ) : alertsModal.alerts.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            {language === "ar" ? "لا يوجد أحد مسجل لهذا المنتج حاليًا" : "No one is waiting on this product right now."}
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {alertsModal.alerts.map((alert) => (
-                <div key={alert.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">{alert.contact}</span>
-                  {isPhoneContact(alert.contact) ? (
-                    <a
-                      href={`https://wa.me/${alert.contact.replace(/\D/g, "")}?text=${encodeURIComponent(
-                        language === "ar"
-                          ? `منتج "${alertsModal.product?.nameAr}" بقى متوفر تاني!`
-                          : `"${alertsModal.product?.nameEn}" is back in stock!`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-green-600 hover:underline"
-                    >
-                      WhatsApp
-                    </a>
-                  ) : (
-                    <a
-                      href={`mailto:${alert.contact}?subject=${encodeURIComponent(
-                        language === "ar" ? "المنتج بقى متوفر!" : "Back in stock!"
-                      )}`}
-                      className="text-xs font-medium text-blue-600 hover:underline"
-                    >
-                      Email
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-            <Button className="w-full" onClick={handleMarkAlertsSent}>
-              {language === "ar" ? "تم التبليغ - إغلاق القائمة" : "Mark all as notified"}
-            </Button>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

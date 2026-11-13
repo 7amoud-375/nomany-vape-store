@@ -116,12 +116,15 @@ export const removeLocalStorage = (key) => {
 export const filterProducts = (products, filters) => {
   let result = [...products];
 
+  // Ids are compared as strings on both sides. A category id arrives as a
+  // number from the API but as a string from anything that has been through a
+  // form control or a URL, and a strict compare silently matches nothing.
   if (filters.category && filters.category !== "all") {
-    result = result.filter((p) => p.category === filters.category);
+    result = result.filter((p) => String(p.category) === String(filters.category));
   }
 
   if (filters.brand && filters.brand !== "all") {
-    result = result.filter((p) => p.brand === filters.brand);
+    result = result.filter((p) => String(p.brand) === String(filters.brand));
   }
 
   if (filters.availability !== undefined) {
@@ -179,20 +182,33 @@ export const sortProducts = (products, sortBy) => {
  * Every field is coerced before use: a product saved without a description or
  * tags used to throw on `.toLowerCase()` and take the whole page down.
  */
-export const searchProducts = (products, query, locale = "ar") => {
+export const searchProducts = (products, query, locale = "ar", lookups = {}) => {
   if (!query || !query.trim()) return products;
 
   const needle = query.toLowerCase().trim();
   const has = (value) => String(value ?? "").toLowerCase().includes(needle);
+
+  /*
+   * `product.category` and `product.brand` are numeric ids, so matching them
+   * directly only ever matched someone typing a number. Passing the collections
+   * in lets a search for "Vapes" or "SMOK" find the products that belong to
+   * them, which is what anyone typing a category name expects.
+   */
+  const nameById = (collection, id, ...fields) => {
+    if (!Array.isArray(collection) || id === null || id === undefined) return "";
+    const match = collection.find((row) => String(row.id) === String(id));
+    if (!match) return "";
+    return fields.map((field) => match[field]).filter(Boolean).join(" ");
+  };
 
   return products.filter((p) => {
     if (!p) return false;
     return (
       has(locale === "ar" ? p.nameAr : p.nameEn) ||
       has(locale === "ar" ? p.descriptionAr : p.descriptionEn) ||
-      has(p.brand) ||
-      has(p.category) ||
       has(p.sku) ||
+      has(nameById(lookups.categories, p.category, "nameAr", "nameEn")) ||
+      has(nameById(lookups.brands, p.brand, "name")) ||
       (Array.isArray(p.tags) && p.tags.some((tag) => has(tag)))
     );
   });
@@ -203,4 +219,39 @@ export const productImage = (product) => {
   const images = product?.images;
   if (!Array.isArray(images)) return null;
   return images.find((src) => typeof src === "string" && src.trim() !== "") ?? null;
+};
+
+/**
+ * The display name for one flavour entry, in the visitor's language.
+ *
+ * Falls back to whichever name exists when the other is blank — an admin who
+ * only filled in one language should still see the flavour rather than a
+ * blank chip. A legacy entry saved as a plain string (from before flavours
+ * carried two names) is handled the same way at either language.
+ */
+export const flavorLabel = (flavor, language = "ar") => {
+  if (typeof flavor === "string") return flavor;
+  const nameAr = flavor?.nameAr ?? "";
+  const nameEn = flavor?.nameEn ?? "";
+  return (language === "ar" ? nameAr || nameEn : nameEn || nameAr) || "";
+};
+
+/** Whether a product makes the customer pick a flavour before buying. */
+export const hasFlavors = (product) =>
+  Array.isArray(product?.flavors) && product.flavors.some((f) => flavorLabel(f) !== "");
+
+/** A flavour entry as {nameAr, nameEn}, whichever shape it was stored in. */
+export const normaliseFlavor = (flavor) =>
+  typeof flavor === "string"
+    ? { nameAr: flavor, nameEn: "" }
+    : { nameAr: flavor?.nameAr ?? "", nameEn: flavor?.nameEn ?? "" };
+
+/**
+ * The identity of one cart line. The same liquid in two flavours is two lines,
+ * so each keeps its own quantity and can be removed on its own.
+ */
+export const cartLineKey = (productId, flavor) => {
+  if (!flavor) return String(productId);
+  const { nameAr, nameEn } = normaliseFlavor(flavor);
+  return `${productId}::${nameAr}|${nameEn}`;
 };

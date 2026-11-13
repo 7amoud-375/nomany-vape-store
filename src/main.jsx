@@ -5,14 +5,17 @@ import { BrowserRouter } from 'react-router-dom';
 import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
+import { RealtimeProvider } from './context/RealtimeContext';
 import { DataProvider } from './context/DataContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import './index.css'; // Ensure your Tailwind CSS is imported here
 
-// AuthProvider sits above DataProvider: DataContext needs the signed-in role to
-// decide whether to open the admin-only orders subscription.
+// Provider order matters:
+//   AuthProvider   — everything below needs to know whether an admin is signed in
+//   RealtimeProvider — polls only for admins, and DataProvider subscribes to it
+//   DataProvider   — refetches when realtime says something changed
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -22,13 +25,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <LanguageProvider>
           <ThemeProvider>
             <AuthProvider>
-              <DataProvider>
-                <CartProvider>
-                  <WishlistProvider>
-                    <App />
-                  </WishlistProvider>
-                </CartProvider>
-              </DataProvider>
+              <RealtimeProvider>
+                <DataProvider>
+                  <CartProvider>
+                    <WishlistProvider>
+                      <App />
+                    </WishlistProvider>
+                  </CartProvider>
+                </DataProvider>
+              </RealtimeProvider>
             </AuthProvider>
           </ThemeProvider>
         </LanguageProvider>

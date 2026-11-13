@@ -10,10 +10,9 @@ import { PageHeader } from "../../components/dashboard/ui";
 
 const BrandForm = ({ formData, setFormData, language, handleSave, onCancel, t }) => (
   <form onSubmit={handleSave} className="space-y-4">
-    <div>
-      <label className="block text-sm font-medium mb-1">ID</label>
-      <input required value={formData.id} onChange={(e) => setFormData(p => ({ ...p, id: e.target.value }))} className="input-field" placeholder="SMOK, Voopoo, etc." />
-    </div>
+    {/* The manual ID box that used to sit here was a leftover from the
+        Firestore era. Ids are AUTO_INCREMENT now and the API ignores anything
+        the client sends, so the field only ever misled. */}
     <div>
       <label className="block text-sm font-medium mb-1">{t("brand")}</label>
       <input required value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} className="input-field" />
@@ -41,13 +40,15 @@ const DashboardBrands = () => {
   const [editModal, setEditModal] = useState({ open: false, brand: null });
   const [addModal, setAddModal] = useState(false);
 
-  const emptyBrand = { id: "", name: "", logo: "" };
+  const emptyBrand = { name: "", logo: "" };
   const [formData, setFormData] = useState(emptyBrand);
 
   const handleSave = (e) => {
     e.preventDefault();
     if (addModal) {
-      addBrand({ ...formData, id: formData.id || Date.now().toString() });
+      // No client-side id: the database assigns it. The old Date.now() string
+      // was discarded by the API anyway.
+      addBrand(formData);
       setAddModal(false);
     } else {
       updateBrand(editModal.brand.id, formData);
@@ -88,10 +89,23 @@ const DashboardBrands = () => {
         ) : (
           (brands || []).map((brand) => (
             <div key={brand.id} className="card p-4 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-lg font-bold text-primary">
-                  {brand?.name?.charAt(0)?.toUpperCase() || "B"}
-                </span>
+              {/* Now that the logo actually persists, show it — falling back to
+                  the initial when a brand has none. */}
+              <div className="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+                {brand.logo ? (
+                  <img
+                    src={brand.logo}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <span className="text-lg font-bold text-primary">
+                    {brand?.name?.charAt(0)?.toUpperCase() || "B"}
+                  </span>
+                )}
               </div>
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate w-full">
                 {brand.name}

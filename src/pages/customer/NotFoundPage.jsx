@@ -4,13 +4,16 @@ import { Home, Search } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useTranslations } from "../../hooks/useTranslations";
 import Button from "../../components/ui/Button";
+import SectionDecoration from "../../components/common/SectionDecoration";
 
 const NotFoundPage = () => {
   const { language } = useLanguage();
   const { t } = useTranslations();
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="relative overflow-hidden min-h-screen flex items-center justify-center px-4">
+      <SectionDecoration variant="plume" position="bottom-start" size="w-72 h-96" tone="text-primary" motion="none" />
+      <SectionDecoration variant="sparks" position="top-end" size="w-64 h-64" tone="text-accent" motion="none" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

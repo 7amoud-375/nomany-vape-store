@@ -143,17 +143,33 @@ function routeToDevBackend(devBackend, path, method, body) {
 
     if (resource === "orders") {
       if (method === "POST") return devBackend.placeOrder(body);
-      if (method === "PUT" && action === "status") return devBackend.setOrderStatus(id, body?.status);
+      if (method === "PUT" && action === "payment-status") {
+        return devBackend.setOrderPaymentStatus(id, !!body?.paid);
+      }
+      if (method === "PUT") return devBackend.updateOrderDetails(id, body);
       if (method === "DELETE") return devBackend.deleteOrder(id);
+      if (query.get("from") && query.get("to")) {
+        return devBackend.getOrdersInRange(query.get("from"), query.get("to"));
+      }
       return devBackend.getOrders(query.get("date"));
+    }
+
+    if (resource === "updates") {
+      return devBackend.updates(
+        Number(query.get("since_order") || 0),
+        Number(query.get("since_notification") || 0)
+      );
     }
 
     if (resource === "payment-methods") return devBackend.paymentMethods();
 
+    if (resource === "analytics") return devBackend.analytics(query.get("period") || "30d");
+
     if (resource === "stock-notifications") {
       if (method === "POST") return devBackend.addStockAlert(body?.productId, body?.contact);
       if (method === "PUT") return devBackend.resolveStockAlert(id);
-      return devBackend.getStockAlerts(query.get("productId"));
+      if (method === "DELETE") return devBackend.deleteStockAlert(id);
+      return devBackend.getStockAlerts(query.get("productId"), query.get("include") === "all");
     }
 
     throw new ApiError(`dev backend has no route for ${method} ${path}`, 404);
@@ -209,8 +225,15 @@ export const saveSettings = (data) => put("settings", data);
 // Orders
 // ---------------------------------------------------------------------------
 export const fetchOrders = (date) => get(`orders${date ? `?date=${encodeURIComponent(date)}` : ""}`, true);
+
+/** Inclusive business-date range, as used by the Orders page's day/week/month picker. */
+export const fetchOrdersInRange = (from, to) =>
+  get(`orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, true);
+
 export const placeOrder = (data) => post("orders", data);
-export const setOrderStatus = (dbId, status) => put(`orders/${dbId}/status`, { status });
+/** paid: true marks the order paid, false unmarks it. Admin only. */
+export const setOrderPaymentStatus = (dbId, paid) => put(`orders/${dbId}/payment-status`, { paid });
+export const updateOrderDetails = (dbId, data) => put(`orders/${dbId}`, data);
 export const deleteOrderApi = (dbId) => del(`orders/${dbId}`);
 
 export const fetchPaymentMethods = () => get("payment-methods");
@@ -220,13 +243,30 @@ export const fetchPaymentMethods = () => get("payment-methods");
 // ---------------------------------------------------------------------------
 export const requestStockAlert = (productId, contact) =>
   post("stock-notifications", { productId, contact });
-export const fetchStockAlerts = (productId) =>
-  get(`stock-notifications?productId=${encodeURIComponent(productId)}`, true);
+
+/** Omit productId for every request; pass includeDone to see resolved ones too. */
+export const fetchStockAlerts = (productId, includeDone = false) => {
+  const params = new URLSearchParams();
+  if (productId !== undefined && productId !== null) params.set("productId", productId);
+  if (includeDone) params.set("include", "all");
+  const query = params.toString();
+  return get(`stock-notifications${query ? `?${query}` : ""}`, true);
+};
+
 export const resolveStockAlert = (id) => put(`stock-notifications/${id}`, {});
+export const deleteStockAlert = (id) => del(`stock-notifications/${id}`);
+
+// ---------------------------------------------------------------------------
+// Live updates
+// ---------------------------------------------------------------------------
+export const fetchUpdates = (sinceOrder = 0, sinceNotification = 0) =>
+  get(`updates?since_order=${sinceOrder}&since_notification=${sinceNotification}`, true);
 
 // ---------------------------------------------------------------------------
 // Analytics
 // ---------------------------------------------------------------------------
-export const fetchAnalytics = () => get("analytics", true);
+/** period: "today" | "7d" | "30d" | "90d" | "all". */
+export const fetchAnalytics = (period = "30d") =>
+  get(`analytics?period=${encodeURIComponent(period)}`, true);
 
 export { ApiError };

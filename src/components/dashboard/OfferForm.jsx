@@ -190,7 +190,7 @@ const OfferForm = ({ formData, setFormData, language, handleSave, onCancel, t, p
               onClick={() => setOnlySelected((v) => !v)}
               className={`px-3 py-2 rounded-xl text-sm whitespace-nowrap transition-colors ${
                 onlySelected
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-on-primary"
                   : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400"
               }`}
             >
@@ -219,7 +219,7 @@ const OfferForm = ({ formData, setFormData, language, handleSave, onCancel, t, p
                     }`}
                   >
                     <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
-                      isOn ? "bg-primary border-primary text-white" : "border-gray-300 dark:border-slate-600"
+                      isOn ? "bg-primary border-primary text-on-primary" : "border-gray-300 dark:border-slate-600"
                     }`}>
                       {isOn && <Check className="w-3 h-3" />}
                     </span>

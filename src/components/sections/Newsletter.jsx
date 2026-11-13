@@ -25,6 +25,21 @@ const Newsletter = () => {
   return (
     <section className="relative overflow-hidden py-20">
       <SectionDecoration variant="hatch" position="top-end" size="w-64 h-64" tone="text-accent" />
+      <SectionDecoration
+        variant="bubbles"
+        position="bottom-start"
+        size="w-44 h-64"
+        tone="text-primary"
+        motion="none"
+      />
+      <SectionDecoration
+        variant="waves"
+        position="bottom-end"
+        size="w-full h-36"
+        tone="text-primary"
+        motion="none"
+        className="opacity-[0.05] dark:opacity-[0.08]"
+      />
       <div className="container-custom">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

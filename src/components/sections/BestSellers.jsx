@@ -21,6 +21,20 @@ const BestSellers = () => {
   return (
     <section className="relative overflow-hidden py-20">
       <SectionDecoration variant="tag" position="top-start" size="w-56 h-56" tone="text-accent" />
+      <SectionDecoration
+        variant="coil"
+        position="bottom-end"
+        size="w-64 h-64"
+        tone="text-primary"
+        motion="none"
+      />
+      <SectionDecoration
+        variant="sparks"
+        position="top-end"
+        size="w-60 h-60"
+        tone="text-accent"
+        motion="none"
+      />
       <div className="container-custom">
         <div className="flex items-end justify-between mb-12">
           <div>

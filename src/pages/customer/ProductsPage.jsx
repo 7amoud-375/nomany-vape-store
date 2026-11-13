@@ -25,51 +25,61 @@ const FilterContent = ({
   isMobile 
 }) => (
   <div className="space-y-6">
-    {/* Category */}
-    <div>
-      <h4 className="font-semibold text-gray-900 dark:text-white mb-3">{t("category")}</h4>
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="category"
-            checked={filters.category === "all"}
-            onChange={() => setFilters((p) => ({ ...p, category: "all" }))}
-            className="text-primary"
-          />
-          <span className="text-sm text-gray-600 dark:text-gray-400">{t("all")}</span>
-        </label>
-        {categories.map((cat) => (
-          <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+    {/*
+      A filter with nothing to filter by is noise, so each section renders only
+      when its collection has entries. On a shop with no brands set, the brand
+      dropdown offered "All" and nothing else.
+    */}
+    {categories.length > 0 && (
+      <div>
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-3">{t("category")}</h4>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="radio"
               name="category"
-              checked={filters.category === cat.id}
-              onChange={() => setFilters((p) => ({ ...p, category: cat.id }))}
+              checked={filters.category === "all"}
+              onChange={() => setFilters((p) => ({ ...p, category: "all" }))}
               className="text-primary"
             />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {language === "ar" ? cat.nameAr : cat.nameEn}
-            </span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">{t("all")}</span>
           </label>
-        ))}
+          {categories.map((cat) => (
+            <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+              {/* Compared as strings: arriving via ?category=2 gives a string
+                  while cat.id is a number, so the filter applied but no radio
+                  ever looked selected. */}
+              <input
+                type="radio"
+                name="category"
+                checked={String(filters.category) === String(cat.id)}
+                onChange={() => setFilters((p) => ({ ...p, category: cat.id }))}
+                className="text-primary"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {language === "ar" ? cat.nameAr : cat.nameEn}
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
-    </div>
+    )}
 
-    {/* Brand */}
-    <div>
-      <h4 className="font-semibold text-gray-900 dark:text-white mb-3">{t("brand")}</h4>
-      <select
-        value={filters.brand}
-        onChange={(e) => setFilters((p) => ({ ...p, brand: e.target.value }))}
-        className="input-field text-sm"
-      >
-        <option value="all">{t("all")}</option>
-        {brands.map((b) => (
-          <option key={b.id} value={b.id}>{b.name}</option>
-        ))}
-      </select>
-    </div>
+    {brands.length > 0 && (
+      <div>
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-3">{t("brand")}</h4>
+        <select
+          value={filters.brand}
+          onChange={(e) => setFilters((p) => ({ ...p, brand: e.target.value }))}
+          className="input-field text-sm"
+        >
+          <option value="all">{t("all")}</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+      </div>
+    )}
 
     {/* Price */}
     <div>
@@ -228,13 +238,13 @@ const ProductsPage = () => {
             <div className="hidden sm:flex items-center border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
               <button
                 onClick={() => setViewMode("grid")}
-                className={`p-2 ${viewMode === "grid" ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
+                className={`p-2 ${viewMode === "grid" ? "bg-primary text-on-primary" : "text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
               >
                 <Grid3X3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-2 ${viewMode === "list" ? "bg-primary text-white" : "text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
+                className={`p-2 ${viewMode === "list" ? "bg-primary text-on-primary" : "text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800"}`}
               >
                 <LayoutList className="w-4 h-4" />
               </button>

@@ -210,20 +210,28 @@ export function ModalShell({
   footer,
   children,
 }) {
+  if (!open) return null;
+
+  /*
+   * The backdrop renders conditionally rather than through AnimatePresence.
+   *
+   * With an exit animation, a re-render arriving mid-close — and on these pages
+   * one arrives every few seconds from the realtime poll — could leave the node
+   * mounted at opacity 0. Invisible, but still `fixed inset-0` with
+   * pointer-events auto, which silently blocks every click on the dashboard.
+   * The panel keeps its entrance animation; only the exit is gone.
+   */
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-primary-dark/60 p-4 backdrop-blur-sm"
-        >
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-primary-dark/60 p-4 backdrop-blur-sm
+                 motion-safe:animate-[fade-in_0.15s_ease-out]"
+    >
+          {/* No `exit`: there is no AnimatePresence above this any more, so an
+              exit variant would be dead configuration. */}
           <motion.form
             initial={{ scale: 0.95, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 12 }}
             transition={{ type: "spring", stiffness: 340, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
             onSubmit={onSubmit}
@@ -264,9 +272,7 @@ export function ModalShell({
               </div>
             )}
           </motion.form>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </div>
   );
 }
 

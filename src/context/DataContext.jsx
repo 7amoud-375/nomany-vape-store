@@ -1,11 +1,8 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "./AuthContext";
+import { useRealtime, useRealtimeEvent } from "./RealtimeContext";
 import { todayLocalISO, toNumber } from "../utils";
 import { homepage } from "../data/homepage";
-import { categories as seedCategories } from "../data/categories";
-import { brands as seedBrands } from "../data/brands";
-import { banners as seedBanners } from "../data/banners";
-import { products as seedProducts } from "../data/products";
 import { settings as seedSettings } from "../data/settings";
 import * as api from "../services/apiClient";
 import toast from "react-hot-toast";
@@ -20,11 +17,9 @@ export const useData = () => {
   return context;
 };
 
-/** How often the dashboard re-checks for new orders. */
-const ORDER_POLL_MS = 20_000;
-
 export const DataProvider = ({ children }) => {
   const { isAdmin, isLoading: authLoading } = useAuth();
+  const { readyCount } = useRealtime();
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -55,17 +50,29 @@ export const DataProvider = ({ children }) => {
       try {
         return { data: await fetcher(), ok: true };
       } catch (error) {
-        console.warn(`API unavailable for ${label}, using sample data:`, error.message);
+        console.warn(`API unavailable for ${label}:`, error.message);
         return { data: fallback, ok: false };
       }
     };
 
+    /*
+     * The catalogue falls back to empty, not to sample data.
+     *
+     * There used to be a bundled demo catalogue here so the storefront was
+     * never blank during an outage. On a live shop that is worse than blank:
+     * it shows products that do not exist, at prices that are not real, and
+     * they can be added to a cart. An empty catalogue plus the offline flag
+     * below is the honest failure.
+     *
+     * Settings keep their fallback — they are branding and contact details,
+     * not inventory, and a footer with no phone number helps nobody.
+     */
     const [p, c, b, o, bn, s] = await Promise.all([
-      load(api.fetchProducts, seedProducts, "products"),
-      load(api.fetchCategories, seedCategories, "categories"),
-      load(api.fetchBrands, seedBrands, "brands"),
+      load(api.fetchProducts, [], "products"),
+      load(api.fetchCategories, [], "categories"),
+      load(api.fetchBrands, [], "brands"),
       load(api.fetchOffers, [], "offers"),
-      load(api.fetchBanners, seedBanners, "banners"),
+      load(api.fetchBanners, [], "banners"),
       load(api.fetchSettings, seedSettings, "settings"),
     ]);
 
@@ -86,10 +93,10 @@ export const DataProvider = ({ children }) => {
   }, [reload]);
 
   // -- Orders (admin only) ---------------------------------------------------
-  // Polled rather than pushed: shared hosting has no persistent connection, and
-  // a 20s refresh is well within what "reaches the dashboard on its own" needs.
+  // Refreshed on a realtime event rather than a fixed timer. RealtimeContext
+  // owns the polling; this just reacts, so a new order lands in every consumer
+  // at once instead of up to twenty seconds later.
   const [orderDate, setOrderDate] = useState(() => todayLocalISO());
-  const previousCount = useRef(null);
 
   const loadOrders = useCallback(
     async (date) => {
@@ -99,15 +106,7 @@ export const DataProvider = ({ children }) => {
         return;
       }
       try {
-        const rows = await api.fetchOrders(date);
-        setOrders(rows);
-
-        // Announce genuinely new arrivals, but not on the first load.
-        if (previousCount.current !== null && rows.length > previousCount.current) {
-          const fresh = rows.length - previousCount.current;
-          toast.success(`${fresh} new order${fresh > 1 ? "s" : ""}`, { icon: "🛒" });
-        }
-        previousCount.current = rows.length;
+        setOrders(await api.fetchOrders(date));
       } catch (error) {
         console.error("Could not load orders:", error);
       } finally {
@@ -118,16 +117,27 @@ export const DataProvider = ({ children }) => {
   );
 
   useEffect(() => {
-    if (authLoading) return undefined;
-
-    previousCount.current = null;
+    if (authLoading) return;
     loadOrders(orderDate);
-
-    if (!isAdmin) return undefined;
-
-    const timer = setInterval(() => loadOrders(orderDate), ORDER_POLL_MS);
-    return () => clearInterval(timer);
   }, [isAdmin, authLoading, orderDate, loadOrders]);
+
+  /**
+   * A new order arrived. Refetch rather than splicing it in: the list is
+   * date-filtered and every derived total reads from it, so appending an order
+   * that falls outside the selected day would quietly corrupt the figures.
+   */
+  useRealtimeEvent("order:new", (order) => {
+    toast.success(
+      `New order${order?.customerName ? ` — ${order.customerName}` : ""}`,
+      { icon: "🛒", id: `order-${order?.id ?? Date.now()}` }
+    );
+    loadOrders(orderDate);
+  });
+
+  // Reconnecting after a drop: pick up whatever landed while polling was down.
+  useEffect(() => {
+    if (readyCount > 1) loadOrders(orderDate);
+  }, [readyCount, loadOrders, orderDate]);
 
   // -- Generic CRUD helper ---------------------------------------------------
   const mutate = useCallback(
@@ -281,14 +291,22 @@ export const DataProvider = ({ children }) => {
   );
 
   // -- Orders ----------------------------------------------------------------
-  const updateOrderStatus = useCallback(
-    async (orderId, status) => {
+  /**
+   * Whether the money has actually arrived — the one order state this shop
+   * tracks (see constants/index.js). Replaces the old fulfilment-status
+   * update, which nothing called any more now that Orders dropped its status
+   * column.
+   */
+  const updateOrderPaymentStatus = useCallback(
+    async (orderId, paid) => {
       const order = orders.find((o) => o.id === orderId);
       if (!order) return;
       await mutate(async () => {
-        await api.setOrderStatus(order.dbId, status);
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
-      }, null, "Order status updated");
+        await api.setOrderPaymentStatus(order.dbId, paid);
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: paid ? "paid" : "unpaid" } : o))
+        );
+      }, null, paid ? "Order marked paid" : "Order marked unpaid");
     },
     [orders, mutate]
   );
@@ -329,9 +347,9 @@ export const DataProvider = ({ children }) => {
     }
   }, []);
 
-  const fetchStockAlerts = useCallback(async (productId) => {
+  const fetchStockAlerts = useCallback(async (productId, includeDone = false) => {
     try {
-      return await api.fetchStockAlerts(productId);
+      return await api.fetchStockAlerts(productId, includeDone);
     } catch {
       return [];
     }
@@ -341,10 +359,37 @@ export const DataProvider = ({ children }) => {
     await Promise.all(ids.map((id) => api.resolveStockAlert(id)));
   }, []);
 
+  const deleteStockAlert = useCallback(async (id) => {
+    await api.deleteStockAlert(id);
+  }, []);
+
   // -- Derived ---------------------------------------------------------------
+  /**
+   * Categories carrying a live product count.
+   *
+   * The count is derived here rather than trusted from the server field. It is
+   * then always consistent with the very list the page is rendering: adding,
+   * deleting or recategorising a product updates the number immediately,
+   * without waiting for a refetch, and a category can never claim products the
+   * visitor cannot see.
+   */
+  const categoriesWithCounts = useMemo(() => {
+    const tally = new Map();
+    for (const product of products) {
+      const key = String(product?.category ?? "");
+      tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    return categories.map((category) => ({
+      ...category,
+      productCount: tally.get(String(category.id)) ?? 0,
+    }));
+  }, [categories, products]);
+
   const stats = useMemo(() => {
     const today = todayLocalISO();
-    const counted = orders.filter((o) => o.status !== "cancelled");
+    // Used to exclude cancelled orders; there is no fulfilment status any
+    // more (see constants/index.js), so every order counts.
+    const counted = orders;
 
     return {
       totalProducts: products.length,
@@ -365,7 +410,8 @@ export const DataProvider = ({ children }) => {
   return (
     <DataContext.Provider
       value={{
-        products, categories, brands, banners, offers, settings,
+        // Categories always carry a live productCount derived from `products`.
+        products, categories: categoriesWithCounts, brands, banners, offers, settings,
         orders, ordersLoading, isLoading, loadError,
         orderDate, setOrderDate,
         reload,
@@ -374,16 +420,13 @@ export const DataProvider = ({ children }) => {
         addCategory, updateCategory, deleteCategory,
         addBrand, updateBrand, deleteBrand,
         addOffer, updateOffer, deleteOffer,
-        updateOrderStatus, deleteOrder,
+        updateOrderPaymentStatus, deleteOrder,
         updateSettings,
-        requestStockNotification, fetchStockAlerts, resolveStockAlerts,
+        requestStockNotification, fetchStockAlerts, resolveStockAlerts, deleteStockAlert,
         // Which homepage sections render, and their titles. Static config
         // rather than a database row — it changes when the design changes,
         // not from the dashboard.
         homepage,
-        // Testimonials were removed from the product; kept as an empty array so
-        // anything still importing it renders nothing rather than crashing.
-        testimonials: [],
       }}
     >
       {children}

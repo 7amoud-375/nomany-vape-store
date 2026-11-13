@@ -18,7 +18,18 @@ export const settings = {
   hashtagAr: "#النعماني_بتاع_الفيب",
   hashtagEn: "#Nomany_Bta3_Elvape",
   tiktok: "",
-  shippingCost: 80, // ADDED: Default shipping cost
+
+  // Manual transfer details shown at checkout. Blank means "no gateway
+  // configured yet" — see Dashboard -> Settings -> Payment.
+  instapayNumber: "",
+  vodafoneCashNumber: "",
+
+  // Delivery areas and their fees. Matches the server's own default in
+  // api/lib/db.php so a fresh dev environment and a fresh deploy start out the
+  // same. The checkout will not accept an order whose city is not on this
+  // list — the fee always comes from here, never from anything the browser
+  // sends its own number for.
+  deliveryCities: [{ nameAr: "المنزلة", nameEn: "Manzala", fee: 80 }],
 
   // Return policy shown at /return-policy. Fully editable from
   // Dashboard -> Settings; these are only the starting text.

@@ -38,7 +38,7 @@ const Footer = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center
-                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-white
+                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-on-primary
                          transition-all duration-200"
               >
                 <Facebook className="w-4 h-4" />
@@ -48,7 +48,7 @@ const Footer = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center
-                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-white
+                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-on-primary
                          transition-all duration-200"
               >
                 <Instagram className="w-4 h-4" />
@@ -58,7 +58,7 @@ const Footer = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center
-                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-white
+                         text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-on-primary
                          transition-all duration-200"
               >
                 <Send className="w-4 h-4" />
@@ -72,7 +72,7 @@ const Footer = () => {
                   rel="noopener noreferrer"
                   aria-label="TikTok"
                   className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center
-                           text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-white
+                           text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-on-primary
                            transition-all duration-200"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

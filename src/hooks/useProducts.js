@@ -37,7 +37,9 @@ export const useProducts = () => {
 
   const getRelatedProducts = (productId, category, limit = 4) =>
     products
-      .filter((p) => String(p.id) !== String(productId) && p.category === category)
+      .filter(
+        (p) => String(p.id) !== String(productId) && String(p.category) === String(category)
+      )
       .slice(0, limit);
 
   return {

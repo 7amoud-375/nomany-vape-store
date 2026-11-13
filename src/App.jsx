@@ -4,6 +4,7 @@ import { useLanguage } from "./context/LanguageContext";
 import { ADMIN_LOGIN_PATH } from "./constants";
 import CustomerLayout from "./layouts/CustomerLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
+import ScrollToTop from "./components/common/ScrollToTop";
 import HomePage from "./pages/customer/HomePage";
 
 // Everything except the landing page is code-split: the dashboard alone was
@@ -29,6 +30,7 @@ const DashboardCategories = lazy(() => import("./pages/dashboard/DashboardCatego
 const DashboardBrands = lazy(() => import("./pages/dashboard/DashboardBrands"));
 const DashboardOffers = lazy(() => import("./pages/dashboard/DashboardOffers"));
 const DashboardOrders = lazy(() => import("./pages/dashboard/DashboardOrders"));
+const DashboardStockAlerts = lazy(() => import("./pages/dashboard/DashboardStockAlerts"));
 const DashboardAnalytics = lazy(() => import("./pages/dashboard/DashboardAnalytics"));
 const DashboardSettings = lazy(() => import("./pages/dashboard/DashboardSettings"));
 
@@ -42,7 +44,12 @@ function App() {
   const { dir } = useLanguage();
 
   return (
-    <div dir={dir} className="min-h-screen bg-secondary-light dark:bg-slate-950 transition-colors duration-300">
+    // No background utility here on purpose — index.css paints the canvas on
+    // <html>, so the theme cannot lose a specificity tie between
+    // `bg-secondary-light` and `dark:bg-slate-950`.
+    <div dir={dir} className="min-h-screen">
+      {/* Inside the router, above the routes: every navigation starts at the top. */}
+      <ScrollToTop />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           {/* Storefront — no accounts, checkout is guest-only */}
@@ -74,6 +81,7 @@ function App() {
             <Route path="brands" element={<DashboardBrands />} />
             <Route path="offers" element={<DashboardOffers />} />
             <Route path="orders" element={<DashboardOrders />} />
+            <Route path="stock-alerts" element={<DashboardStockAlerts />} />
             <Route path="analytics" element={<DashboardAnalytics />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>

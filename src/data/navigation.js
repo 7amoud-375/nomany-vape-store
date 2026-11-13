@@ -14,6 +14,7 @@ export const navigation = {
     { id: "brands", labelAr: "الماركات", labelEn: "Brands", path: "/dashboard/brands" },
     { id: "offers", labelAr: "العروض", labelEn: "Offers", path: "/dashboard/offers" },
     { id: "orders", labelAr: "الطلبات", labelEn: "Orders", path: "/dashboard/orders" },
+    { id: "stockAlerts", labelAr: "تنبيهات التوفر", labelEn: "Stock alerts", path: "/dashboard/stock-alerts" },
     { id: "analytics", labelAr: "التحليلات", labelEn: "Analytics", path: "/dashboard/analytics" },
     { id: "settings", labelAr: "الإعدادات", labelEn: "Settings", path: "/dashboard/settings" },
   ],

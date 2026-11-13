@@ -15,6 +15,11 @@
     RewriteCond %{HTTP:X-Forwarded-Proto} !https
     RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
 
+    # sitemap.xml is generated from the database so it never goes stale as the
+    # catalogue changes. Must come before the -f check, since no such file
+    # exists on disk.
+    RewriteRule ^sitemap\.xml$ /api/sitemap.php [L]
+
     # Serve real files and directories as-is, and never rewrite the PHP API.
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d

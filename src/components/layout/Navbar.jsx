@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -26,6 +26,7 @@ const Navbar = () => {
   const { isScrolled } = useScrollPosition();
   const { t } = useTranslations();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -33,15 +34,29 @@ const Navbar = () => {
 
   const navLinks = navigation.customer;
 
+  /**
+   * Navigate through the router, not window.location.
+   *
+   * The old assignment did a full document load: the whole bundle was
+   * re-downloaded and parsed, every context was rebuilt from scratch, and the
+   * cart flashed empty until localStorage was re-read. In a single-page app
+   * that is a page reload dressed up as a search.
+   */
   const handleSearch = (e) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
-    }
+    const term = searchQuery.trim();
+    if (!term) return;
+
+    navigate(`/search?q=${encodeURIComponent(term)}`);
+    setIsSearchOpen(false);
+    setSearchQuery("");
   };
 
+  // Close both overlays on any route change — back button and redirects too,
+  // not just the paths that go through a click handler.
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsSearchOpen(false);
   }, [location]);
 
   return (
@@ -100,7 +115,7 @@ const Navbar = () => {
               >
                 <Heart className="w-5 h-5" />
                 {wishlist.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-on-primary text-xs rounded-full flex items-center justify-center">
                     {wishlist.length}
                   </span>
                 )}
@@ -114,7 +129,7 @@ const Navbar = () => {
               >
                 <ShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-on-primary text-xs rounded-full flex items-center justify-center">
                     {cartCount}
                   </span>
                 )}
@@ -143,23 +158,32 @@ const Navbar = () => {
         </div>
       </motion.header>
 
-      {/* Search Overlay */}
-      <AnimatePresence>
-        {isSearchOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"
-            onClick={() => setIsSearchOpen(false)}
+      {/*
+        Search Overlay — plain conditional rendering, deliberately not
+        AnimatePresence.
+
+        Submitting the form navigates, and that re-render raced the exit
+        animation: the overlay faded to opacity 0 but AnimatePresence never
+        unmounted it, leaving an invisible full-screen layer with
+        `pointer-events: auto` on top of the page. Every click after a search
+        hit that layer instead of the page, which looked exactly like "the
+        search is broken".
+
+        The open animation is CSS, so there is no exit to leave behind and no
+        way for the node to outlive the state.
+      */}
+      {isSearchOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm motion-safe:animate-[fade-in_0.2s_ease-out]"
+          onClick={() => setIsSearchOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("searchPlaceholder")}
+        >
+          <div
+            className="container-custom pt-24"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="container-custom pt-24"
-              onClick={(e) => e.stopPropagation()}
-            >
               <form onSubmit={handleSearch} className="relative">
                 <Search className="absolute start-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -181,15 +205,15 @@ const Navbar = () => {
                   <X className="w-5 h-5 text-gray-400" />
                 </button>
               </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
+            key="mobile-menu"
             initial={{ opacity: 0, x: isRTL ? 300 : -300 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: isRTL ? 300 : -300 }}
@@ -245,7 +269,7 @@ const Navbar = () => {
                     <ShoppingCart className="w-5 h-5" />
                     {t("cart")}
                     {cartCount > 0 && (
-                      <span className="ml-auto bg-primary text-white text-xs px-2 py-1 rounded-full">
+                      <span className="ml-auto bg-primary text-on-primary text-xs px-2 py-1 rounded-full">
                         {cartCount}
                       </span>
                     )}
@@ -257,7 +281,7 @@ const Navbar = () => {
                     <Heart className="w-5 h-5" />
                     {t("wishlist")}
                     {wishlist.length > 0 && (
-                      <span className="ml-auto bg-primary text-white text-xs px-2 py-1 rounded-full">
+                      <span className="ml-auto bg-primary text-on-primary text-xs px-2 py-1 rounded-full">
                         {wishlist.length}
                       </span>
                     )}

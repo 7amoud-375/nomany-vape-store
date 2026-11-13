@@ -55,6 +55,15 @@ const compress = (file) =>
     img.src = url;
   });
 
+/** Read a blob back as a data: URL, for the no-PHP development path. */
+const toDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read the processed image"));
+    reader.readAsDataURL(blob);
+  });
+
 export const uploadProductImage = async (file) => {
   if (!file) throw new Error("No file given");
   if (!file.type?.startsWith("image/")) throw new Error("Only image files are allowed");
@@ -80,7 +89,25 @@ export const uploadProductImage = async (file) => {
       signal: controller.signal,
     });
 
-    const data = await response.json().catch(() => ({}));
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      /*
+       * Not JSON. On `npm run dev` there is no PHP, so Vite answers /api/*
+       * with index.html and a 200 — which used to surface as the baffling
+       * "Upload failed (200)" and made the dashboard's image picker look
+       * broken. Locally, fall back to an inline data URL so the whole product
+       * flow can be exercised without a server.
+       */
+      if (import.meta.env.DEV) return toDataUrl(blob);
+      throw new Error(
+        `The server did not return an upload result (${response.status}). ` +
+          `Check that api/upload.php exists and that uploads/ is writable.`
+      );
+    }
+
     if (!response.ok || !data.url) {
       throw new Error(data.error || `Upload failed (${response.status})`);
     }
@@ -89,6 +116,8 @@ export const uploadProductImage = async (file) => {
     if (error.name === "AbortError") {
       throw new Error("Upload timed out — check your connection and try again");
     }
+    // A dead network in dev lands here rather than in the parse branch above.
+    if (import.meta.env.DEV && error instanceof TypeError) return toDataUrl(blob);
     throw error;
   } finally {
     clearTimeout(timer);

@@ -77,11 +77,6 @@ export const homepage = {
       },
     ],
   },
-  testimonials: {
-    enabled: true,
-    titleAr: "آراء عملائنا",
-    titleEn: "Customer Testimonials",
-  },
   newsletter: {
     enabled: true,
     titleAr: "اشترك في نشرتنا الإخبارية",

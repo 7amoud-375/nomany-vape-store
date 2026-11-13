@@ -75,13 +75,44 @@ function db_insert_id()
 }
 
 /**
- * Create every table if missing. Safe to call on each request — MySQL parses
- * these quickly and it means a fresh deploy needs no manual SQL step.
+ * The schema revision this build expects. Bump it whenever a table or a
+ * default setting changes, and the next request migrates the database.
+ */
+const SCHEMA_VERSION = 6;
+
+/**
+ * Create every table if missing, then record that we did.
+ *
+ * This used to run unconditionally on every single request: eight CREATE TABLE
+ * statements, two ALTERs and nineteen INSERT IGNOREs before the endpoint did
+ * any of its own work. That is roughly thirty wasted round-trips per API call,
+ * which on a shared plan with a per-user connection and CPU quota is the most
+ * expensive thing the API does.
+ *
+ * Now the work happens once per SCHEMA_VERSION. The marker lives in the
+ * settings table, so the check costs one indexed primary-key lookup; if the
+ * table does not exist yet the query throws and we fall through to the full
+ * build, which is exactly the first-boot path.
  */
 function db_init()
 {
     $pdo = db();
 
+    try {
+        $row = $pdo->query("SELECT `value` FROM settings WHERE `key` = 'schema_version'")->fetch();
+        if ($row && (int) $row['value'] >= SCHEMA_VERSION) {
+            return;
+        }
+    } catch (PDOException $e) {
+        // No settings table yet — first boot. Fall through and build it.
+    }
+
+    db_build_schema($pdo);
+}
+
+/** The actual DDL. Idempotent, but only called when the version marker is stale. */
+function db_build_schema($pdo)
+{
     $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name_en VARCHAR(190) NOT NULL,
@@ -94,11 +125,15 @@ function db_init()
     $pdo->exec("CREATE TABLE IF NOT EXISTS brands (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(190) NOT NULL,
+        logo_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // `images` is a JSON array of URLs. Storing the paths rather than the bytes
     // is the whole point of moving off the old base64-into-the-document setup.
+    // `flavors` is the same idea, optional: a plain JSON array of names such as
+    // ["Mango Ice", "Mint"] for an e-liquid or disposable. NULL/empty means the
+    // admin never set any, which is a normal, complete product.
     $pdo->exec("CREATE TABLE IF NOT EXISTS products (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name_en VARCHAR(190) NOT NULL,
@@ -111,6 +146,7 @@ function db_init()
         price DECIMAL(10,2) NOT NULL DEFAULT 0,
         discount_price DECIMAL(10,2) NULL,
         images JSON NULL,
+        flavors JSON NULL,
         is_available TINYINT(1) NOT NULL DEFAULT 1,
         featured TINYINT(1) NOT NULL DEFAULT 0,
         best_seller TINYINT(1) NOT NULL DEFAULT 0,
@@ -153,17 +189,31 @@ function db_init()
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Older databases predate the button columns.
-    foreach (['button_text_en VARCHAR(120)', 'button_text_ar VARCHAR(120)'] as $column) {
-        try {
-            $pdo->exec("ALTER TABLE banners ADD COLUMN {$column}");
-        } catch (PDOException $e) {
-            // Column already exists — nothing to do.
+    // Columns added after a database may already have been created. CREATE
+    // TABLE IF NOT EXISTS does nothing for an existing table, so each new
+    // column needs its own ALTER; a duplicate-column error just means an
+    // up-to-date database.
+    foreach ([
+        'banners'  => ['button_text_en VARCHAR(120)', 'button_text_ar VARCHAR(120)'],
+        'brands'   => ['logo_url TEXT'],
+        'products' => ['flavors JSON NULL'],
+    ] as $table => $columns) {
+        foreach ($columns as $column) {
+            try {
+                $pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column}");
+            } catch (PDOException $e) {
+                // Column already exists — nothing to do.
+            }
         }
     }
 
-    // payment_status is separate from status on purpose: an order can be
-    // confirmed and unpaid (cash on delivery) or paid and still preparing.
+    // There used to be a separate fulfilment `status` (pending/confirmed/
+    // preparing/shipped/delivered/cancelled) alongside payment_status. Nobody
+    // drove it from the dashboard any more — Orders dropped that workflow on
+    // purpose — so every order sat at its creation value forever while other
+    // pages kept reading it as if it were live. Dropped below for existing
+    // databases; payment_status (unpaid/paid, set by the admin from Orders)
+    // is the one order state this shop actually tracks.
     $pdo->exec("CREATE TABLE IF NOT EXISTS orders (
         id INT AUTO_INCREMENT PRIMARY KEY,
         order_number VARCHAR(40) NOT NULL,
@@ -177,17 +227,31 @@ function db_init()
         subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
         shipping_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
         total DECIMAL(10,2) NOT NULL DEFAULT 0,
-        status VARCHAR(30) NOT NULL DEFAULT 'pending',
         payment_method VARCHAR(30) NOT NULL DEFAULT 'cod',
         payment_status VARCHAR(30) NOT NULL DEFAULT 'unpaid',
         payment_reference VARCHAR(190),
         business_date DATE NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_business_date (business_date),
-        INDEX idx_status (status),
         INDEX idx_order_number (order_number),
         INDEX idx_reference (payment_reference)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // The dropped fulfilment-status column, for a database created before
+    // SCHEMA_VERSION 6. CREATE TABLE IF NOT EXISTS above did nothing on such
+    // a database, so it still has `status` and its index; both statements
+    // are no-ops (caught and ignored) on a fresh install, which never had
+    // them to begin with.
+    try {
+        $pdo->exec('ALTER TABLE orders DROP INDEX idx_status');
+    } catch (PDOException $e) {
+        // Index already gone, or never existed.
+    }
+    try {
+        $pdo->exec('ALTER TABLE orders DROP COLUMN status');
+    } catch (PDOException $e) {
+        // Column already gone, or never existed.
+    }
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS settings (
         `key` VARCHAR(100) PRIMARY KEY,
@@ -211,6 +275,21 @@ function db_init()
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     db_seed_settings();
+
+    /*
+     * Repair products orphaned by the old product form, which submitted an
+     * empty category as "" and stored it as 0. Zero matches no category row, so
+     * those products were invisible on every category page. NULL is the honest
+     * value — the admin still has to pick a category, but now the dashboard
+     * shows the field as empty instead of pointing at a category that isn't
+     * there.
+     */
+    $pdo->exec('UPDATE products SET category_id = NULL WHERE category_id = 0');
+    $pdo->exec('UPDATE products SET brand_id = NULL WHERE brand_id = 0');
+
+    // Written last: if anything above threw, the marker stays stale and the
+    // next request retries the whole build rather than skipping it.
+    settings_put(['schema_version' => SCHEMA_VERSION]);
 }
 
 /**
@@ -222,9 +301,22 @@ function db_default_settings()
     return [
         'store_name_en'     => 'Nomany Store',
         'store_name_ar'     => 'النعماني ستور',
-        'shipping_cost'     => '80',
+        // Per-area delivery, the same idea as the reference café project: a
+        // short list of {nameAr, nameEn, fee} the admin edits from Settings.
+        // Checkout will not accept an order whose city is not on this list, and
+        // the fee always comes from here — never from anything the browser
+        // sends. Seeded with the store's own city so a fresh shop can already
+        // take an order before the admin configures anything.
+        'delivery_cities'   => json_encode([
+            ['nameAr' => 'المنزلة', 'nameEn' => 'Manzala', 'fee' => 80],
+        ], JSON_UNESCAPED_UNICODE),
         'phone'             => '+20 10 1234 5678',
         'whatsapp'          => '+20 10 1234 5678',
+        // Manual transfer details shown at checkout for the instapay/
+        // vodafone_cash payment methods (see api/lib/payments.php). Blank
+        // until the admin fills them in from Dashboard -> Settings -> Payment.
+        'instapay_number'      => '',
+        'vodafone_cash_number' => '',
         'email'             => 'info@nomanystore.com',
         'address_en'        => 'Manzala, Dakahlia, Egypt',
         'address_ar'        => 'المنزلة، الدقهلية, مصر',
@@ -276,6 +368,57 @@ function settings_put(array $pairs)
     foreach ($pairs as $key => $value) {
         $stmt->execute([$key, is_scalar($value) ? (string) $value : json_encode($value)]);
     }
+}
+
+/**
+ * The delivery areas and their fees, validated and ready to use.
+ *
+ * Stored as one JSON setting rather than its own table — it is a short list
+ * the admin edits by hand, and checkout needs the whole thing at once anyway.
+ * Malformed or partial rows are dropped rather than surfaced, so one bad edit
+ * in the settings JSON cannot break every other area's delivery.
+ */
+function delivery_cities()
+{
+    $raw = settings_get('delivery_cities', '[]');
+    $list = json_decode($raw, true);
+    if (!is_array($list)) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($list as $row) {
+        $nameAr = trim((string) ($row['nameAr'] ?? ''));
+        $nameEn = trim((string) ($row['nameEn'] ?? ''));
+        $fee = isset($row['fee']) ? (float) $row['fee'] : null;
+
+        if (($nameAr === '' && $nameEn === '') || $fee === null || $fee < 0) {
+            continue;
+        }
+        $out[] = ['nameAr' => $nameAr, 'nameEn' => $nameEn, 'fee' => $fee];
+    }
+    return $out;
+}
+
+/**
+ * Match a customer-typed city against the delivery list, by either language.
+ *
+ * The storefront may be in Arabic or English, so the value submitted could be
+ * either name — matching both, case-insensitively, is what lets the same
+ * dropdown work regardless of which language the visitor is browsing in.
+ */
+function match_delivery_city($typed)
+{
+    $needle = mb_strtolower(trim((string) $typed));
+    if ($needle === '') {
+        return null;
+    }
+    foreach (delivery_cities() as $city) {
+        if (mb_strtolower($city['nameAr']) === $needle || mb_strtolower($city['nameEn']) === $needle) {
+            return $city;
+        }
+    }
+    return null;
 }
 
 /**

@@ -120,4 +120,29 @@ function api_rate_limit($bucket, $maxRequests = 20, $windowSeconds = 60)
 
     $hits[] = $now;
     file_put_contents($file, json_encode($hits), LOCK_EX);
+
+    api_rate_limit_prune($dir, $now);
+}
+
+/**
+ * Delete counter files nobody has touched in a day.
+ *
+ * One file is created per bucket per client IP and nothing ever removed them,
+ * so the directory grew by a file per visitor forever. Shared hosting bills
+ * inodes, not just bytes, and a few hundred thousand dead 20-byte files is a
+ * genuine way to fill a plan's quota.
+ *
+ * Runs on roughly one request in fifty so the sweep costs nothing on the rest.
+ */
+function api_rate_limit_prune($dir, $now)
+{
+    if (random_int(1, 50) !== 1) {
+        return;
+    }
+
+    foreach (glob($dir . '/*.json') ?: [] as $file) {
+        if (@filemtime($file) < $now - 86400) {
+            @unlink($file);
+        }
+    }
 }

@@ -1,19 +1,19 @@
 <?php
 /**
- * Payment providers.
+ * Payment methods.
  *
- * Same contract as the reference project, so swapping gateway is a config
- * change rather than a rewrite:
+ * No gateway, no API keys, nothing to sign or verify. Every method here is
+ * "collect the money outside the API" — cash in hand, or a bank/wallet
+ * transfer the customer sends themselves — so create_payment() never talks
+ * to a third party and there is no webhook to receive.
  *
- *   supported_methods()                    → ['cod', 'card', 'wallet']
- *   is_configured()                        → credentials present
- *   create_payment($order, $method, $cust) → ['status' => ..., 'reference' => ...]
- *   verify_webhook($payload, $headers)     → ['valid' =>, 'reference' =>, 'paid' =>]
+ *   supported_methods()             → ['cod', 'instapay', 'vodafone_cash']
+ *   create_payment($order, $method) → ['status' => ..., 'reference' => ...]
  *
  * status is one of:
- *   'pending_cash' — collect on delivery, nothing to do online
- *   'redirect'     — send the customer to redirectUrl
- *   'failed'       — provider refused
+ *   'pending_cash'   — collect on delivery, nothing to confirm upfront
+ *   'pending_manual' — customer transfers themselves; an admin marks the
+ *                      order paid by hand once the money is actually in
  */
 
 if (!defined('NOMANY_API')) {
@@ -21,66 +21,14 @@ if (!defined('NOMANY_API')) {
     exit('Direct access denied');
 }
 
-function payment_config()
-{
-    $env = api_env();
-    return [
-        'provider'   => strtolower($env['PAYMENT_PROVIDER'] ?? 'cod'),
-        'currency'   => $env['PAYMENT_CURRENCY'] ?? 'EGP',
-        'returnUrl'  => $env['PAYMENT_RETURN_URL'] ?? '',
-        'webhookUrl' => $env['PAYMENT_WEBHOOK_URL'] ?? '',
-        'kashier'    => [
-            'merchantId' => $env['KASHIER_MERCHANT_ID'] ?? '',
-            'apiKey'     => $env['KASHIER_API_KEY'] ?? '',
-            'secretKey'  => $env['KASHIER_SECRET_KEY'] ?? '',
-            'mode'       => $env['KASHIER_MODE'] ?? 'test',
-        ],
-    ];
-}
-
-function payment_provider_name()
-{
-    return payment_config()['provider'];
-}
-
-function payment_is_configured()
-{
-    $config = payment_config();
-    if ($config['provider'] === 'kashier') {
-        return $config['kashier']['merchantId'] !== '' && $config['kashier']['apiKey'] !== '';
-    }
-    return true; // cod needs nothing
-}
-
-/** Methods the storefront should offer right now. */
+/** Methods the storefront should offer. All three need zero configuration. */
 function payment_supported_methods()
 {
-    if (payment_provider_name() === 'kashier' && payment_is_configured()) {
-        return ['cod', 'card', 'wallet'];
-    }
-    // Falling back to cash-only is deliberate: better a working shop than a
-    // card button that dead-ends because credentials are missing.
-    return ['cod'];
+    return ['cod', 'instapay', 'vodafone_cash'];
 }
 
-/**
- * Kashier signs `/?payment=<merchantId>.<orderId>.<amount>.<currency>`
- * with HMAC-SHA256 using the merchant's API key.
- */
-function kashier_signature($orderId, $amount, $config)
+function payment_create($order, $method)
 {
-    $path = '/?payment=' . $config['kashier']['merchantId']
-          . '.' . $orderId
-          . '.' . $amount
-          . '.' . $config['currency'];
-
-    return hash_hmac('sha256', $path, $config['kashier']['apiKey']);
-}
-
-function payment_create($order, $method, $customer)
-{
-    $config = payment_config();
-
     if ($method === 'cod') {
         return [
             'status'    => 'pending_cash',
@@ -89,77 +37,12 @@ function payment_create($order, $method, $customer)
         ];
     }
 
-    if ($config['provider'] !== 'kashier' || !payment_is_configured()) {
-        return [
-            'status' => 'failed',
-            'error'  => 'Online payment is not available right now',
-        ];
-    }
-
-    $orderId = $order['id'] . '-' . time();
-    $amount  = number_format((float) $order['total'], 2, '.', '');
-
-    $params = [
-        'merchantId'        => $config['kashier']['merchantId'],
-        'orderId'           => $orderId,
-        'amount'            => $amount,
-        'currency'          => $config['currency'],
-        'hash'              => kashier_signature($orderId, $amount, $config),
-        'mode'              => $config['kashier']['mode'],
-        // Kashier calls card payments 'card' and mobile wallets 'wallet'.
-        'allowedMethods'    => $method === 'wallet' ? 'wallet' : 'card',
-        'merchantRedirect'  => $config['returnUrl'],
-        'serverWebhook'     => $config['webhookUrl'],
-        'customerReference' => (string) ($customer['phone'] ?? $order['id']),
-        'display'           => 'ar',
-    ];
-
+    // instapay / vodafone_cash: the transfer number/link lives in Settings and
+    // is shown to the customer client-side. Nothing to start server-side —
+    // the order just waits for an admin to see the money and mark it paid.
     return [
-        'status'      => 'redirect',
-        'reference'   => $orderId,
-        'redirectUrl' => 'https://checkout.kashier.io?' . http_build_query($params),
-        'amount'      => $order['total'],
-    ];
-}
-
-/**
- * Validate a gateway callback. Nothing is marked paid without this returning
- * valid AND paid — a request that merely claims success proves nothing.
- */
-function payment_verify_webhook($payload, $headers)
-{
-    $config = payment_config();
-
-    if ($config['provider'] !== 'kashier') {
-        return ['valid' => false, 'reference' => null, 'paid' => false];
-    }
-
-    $secret = $config['kashier']['secretKey'];
-    $received = '';
-    foreach ($headers as $key => $value) {
-        if (strtolower($key) === 'x-kashier-signature') {
-            $received = $value;
-            break;
-        }
-    }
-
-    $data = $payload['data'] ?? null;
-    if (!$secret || !$received || !is_array($data)) {
-        return ['valid' => false, 'reference' => null, 'paid' => false];
-    }
-
-    // Kashier signs the query-string form of the fields it lists in signatureKeys.
-    $pairs = [];
-    foreach (($data['signatureKeys'] ?? []) as $key) {
-        $pairs[] = $key . '=' . ($data[$key] ?? '');
-    }
-    $expected = hash_hmac('sha256', implode('&', $pairs), $secret);
-
-    $valid = hash_equals($expected, (string) $received);
-
-    return [
-        'valid'     => $valid,
-        'reference' => $data['merchantOrderId'] ?? $data['orderId'] ?? null,
-        'paid'      => $valid && strtoupper((string) ($data['status'] ?? '')) === 'SUCCESS',
+        'status'    => 'pending_manual',
+        'reference' => 'MANUAL-' . $order['order_number'],
+        'amount'    => $order['total'],
     ];
 }

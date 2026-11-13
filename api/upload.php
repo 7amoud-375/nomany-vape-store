@@ -75,14 +75,23 @@ if (!move_uploaded_file($tmpPath, $target)) {
 }
 @chmod($target, 0644);
 
+/*
+ * Return a root-relative URL, not an absolute one.
+ *
+ * This used to bake UPLOAD_PUBLIC_URL into every stored image path, so an
+ * image uploaded while working on localhost — or on www. when the setting said
+ * non-www, or before the certificate was live — pointed at a host the browser
+ * could not load, and the picture simply never appeared. The API and the site
+ * are served from the same origin, so "/uploads/x.jpg" is correct everywhere
+ * and immune to the domain changing.
+ *
+ * UPLOAD_PUBLIC_URL is still honoured if it is set, for the case where uploads
+ * are deliberately served from a separate host such as a CDN.
+ */
 $base = rtrim(api_env()['UPLOAD_PUBLIC_URL'] ?? '', '/');
-if ($base === '') {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . '/uploads';
-}
 
 api_json([
     'success' => true,
-    'url'     => $base . '/' . $name,
+    'url'     => ($base === '' ? '/uploads' : $base) . '/' . $name,
     'bytes'   => filesize($target),
 ]);

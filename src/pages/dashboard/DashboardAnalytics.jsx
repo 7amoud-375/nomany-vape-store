@@ -1,328 +1,458 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle, BarChart3, CreditCard, DollarSign, Package,
+  Receipt, RefreshCw, ShoppingCart, Truck, Wallet,
+} from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
-import { useData } from "../../context/DataContext";
 import { useTranslations } from "../../hooks/useTranslations";
+import { fetchAnalytics } from "../../services/apiClient";
 import { formatPrice } from "../../utils";
-import StatsCard from "../../components/dashboard/StatsCard";
-import { PageHeader } from "../../components/dashboard/ui";
-import { BarChart3, TrendingUp, DollarSign, ShoppingCart, Package, Users, Tag, Activity } from "lucide-react";
+import { PAYMENT_STATUS_LABELS } from "../../constants";
+import { Card, EmptyState, MetricCard, PageHeader, SecondaryButton } from "../../components/dashboard/ui";
 
-// Simple SVG Bar Chart Component
-const SimpleBarChart = ({ data, title, color = "#004741", language }) => {
-  if (!data || data.length === 0) return null;
-  
-  const maxValue = Math.max(...data.map(d => d.value || 0));
-  const chartHeight = 200;
-  const barWidth = Math.max(30, 600 / data.length - 10);
-  const gap = 10;
-  
-  return (
-    <div className="card p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{title}</h3>
-      <div className="overflow-x-auto">
-        <div className="flex items-end justify-around" style={{ minHeight: chartHeight + 40 }}>
-          {data.map((item, index) => {
-            const height = maxValue > 0 ? (item.value / maxValue) * chartHeight : 0;
-            return (
-              <div key={index} className="flex flex-col items-center gap-2">
-                <div className="relative group">
-                  <div
-                    className="rounded-t-lg transition-all duration-500 hover:opacity-80"
-                    style={{
-                      width: barWidth,
-                      height: `${height}px`,
-                      backgroundColor: color,
-                      minHeight: item.value > 0 ? "4px" : "0",
-                    }}
-                  />
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    {formatPrice(item.value, language)}
-                  </div>
-                </div>
-                <span className="text-xs text-gray-500 dark:text-gray-400 text-center max-w-[80px] truncate">
-                  {item.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+/**
+ * Store analytics.
+ *
+ * Everything here comes from GET /api/analytics, which aggregates real orders
+ * in SQL for an explicit date range. The previous version derived its figures
+ * from DataContext's `orders`, which only ever holds a single business date —
+ * so "monthly revenue" and the seven-day chart were both silently reporting
+ * today. Nothing on this page is a placeholder: where there is no data, it says
+ * so rather than drawing a zero.
+ */
+
+const PERIODS = [
+  { id: "today", labelAr: "اليوم", labelEn: "Today" },
+  { id: "7d", labelAr: "٧ أيام", labelEn: "7 days" },
+  { id: "30d", labelAr: "٣٠ يوم", labelEn: "30 days" },
+  { id: "90d", labelAr: "٩٠ يوم", labelEn: "90 days" },
+  { id: "all", labelAr: "كل الوقت", labelEn: "All time" },
+];
+
+const PAYMENT_META = {
+  cod:    { icon: Truck,      labelAr: "عند الاستلام", labelEn: "Cash on delivery" },
+  card:   { icon: CreditCard, labelAr: "بطاقة",         labelEn: "Card" },
+  wallet: { icon: Wallet,     labelAr: "محفظة",         labelEn: "Wallet" },
 };
 
-// Simple SVG Line Chart Component
-const SimpleLineChart = ({ data, title, color = "#004741", language }) => {
-  if (!data || data.length === 0) return null;
-  
-  const values = data.map(d => d.value || 0);
-  const maxValue = Math.max(...values);
-  const minValue = Math.min(...values);
-  const range = maxValue - minValue || 1;
-  
-  const width = 600;
+/**
+ * Format a YYYY-MM-DD string from the server without going through Date's
+ * timezone handling — the server works in the store's timezone, and parsing
+ * these as UTC shifts every label back a day for anyone east of Greenwich.
+ */
+const shortDate = (iso, language) => {
+  const [, month, day] = String(iso).split("-");
+  return language === "ar" ? `${Number(day)}/${Number(month)}` : `${Number(month)}/${Number(day)}`;
+};
+
+/** Horizontal bar row — readable at any width, and never encodes by colour alone. */
+const BarRow = ({ label, value, display, max, tint = "bg-primary" }) => (
+  <div className="space-y-1.5">
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span className="min-w-0 truncate text-gray-700 dark:text-gray-300">{label}</span>
+      <span className="shrink-0 font-semibold text-primary dark:text-white">{display}</span>
+    </div>
+    <div className="h-2 overflow-hidden rounded-full bg-secondary-dark/40 dark:bg-slate-800">
+      <div
+        className={`h-full rounded-full ${tint} transition-[width] duration-500`}
+        style={{ width: `${max > 0 ? Math.max(2, (value / max) * 100) : 0}%` }}
+      />
+    </div>
+  </div>
+);
+
+/** Panel wrapper that owns its own "nothing here" copy. */
+const Panel = ({ title, caption, isEmpty, emptyMessage, children }) => (
+  <Card className="p-5 sm:p-6">
+    <div className="mb-4">
+      <h3 className="font-display text-lg font-semibold text-primary dark:text-white">{title}</h3>
+      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{caption}</p>
+    </div>
+    {isEmpty ? (
+      <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">{emptyMessage}</p>
+    ) : (
+      children
+    )}
+  </Card>
+);
+
+/** Revenue and order volume per day, drawn as a single SVG. */
+const TrendChart = ({ series, title, caption, language, emptyMessage }) => {
+  const peak = Math.max(...series.map((point) => point.revenue), 0);
+  const hasData = series.some((point) => point.orders > 0);
+
+  const width = 640;
   const height = 200;
-  const padding = { top: 20, right: 20, bottom: 40, left: 20 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  
-  const points = data.map((item, index) => {
-    const x = padding.left + (index / (data.length - 1 || 1)) * chartWidth;
-    const y = padding.top + chartHeight - ((item.value - minValue) / range) * chartHeight;
-    return `${x},${y}`;
-  }).join(" ");
-  
-  const areaPoints = `${padding.left},${padding.top + chartHeight} ${points} ${padding.left + chartWidth},${padding.top + chartHeight}`;
-  
-  return (
-    <div className="card p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{title}</h3>
-      <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minWidth: 300 }}>
-          {/* Grid lines */}
-          {[0, 1, 2, 3, 4].map(i => {
-            const y = padding.top + (i / 4) * chartHeight;
-            return (
-              <line key={i} x1={padding.left} y1={y} x2={width - padding.right} y2={y} 
-                stroke="currentColor" strokeOpacity="0.1" className="text-gray-400" strokeDasharray="4 4" />
-            );
-          })}
-          
-          {/* Area fill */}
-          <polygon points={areaPoints} fill={color} opacity="0.1" />
-          
-          {/* Line */}
-          <polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          
-          {/* Data points */}
-          {data.map((item, index) => {
-            const x = padding.left + (index / (data.length - 1 || 1)) * chartWidth;
-            const y = padding.top + chartHeight - ((item.value - minValue) / range) * chartHeight;
-            return (
-              <g key={index}>
-                <circle cx={x} cy={y} r="5" fill={color} className="hover:r-6 transition-all" />
-                <text x={x} y={height - 10} textAnchor="middle" className="text-xs fill-gray-500 dark:fill-gray-400">
-                  {item.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    </div>
-  );
-};
+  const pad = { top: 16, right: 12, bottom: 28, left: 12 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
 
-// Simple Pie/Donut Chart
-const SimpleDonutChart = ({ data, title }) => {
-  if (!data || data.length === 0) return null;
-  
-  const total = data.reduce((sum, d) => sum + (d.value || 0), 0);
-  const colors = ["#004741", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
-  
-  let currentAngle = 0;
-  const radius = 80;
-  const center = 100;
-  
-  const getCoordinates = (angle) => ({
-    x: center + radius * Math.cos((angle - 90) * Math.PI / 180),
-    y: center + radius * Math.sin((angle - 90) * Math.PI / 180),
-  });
-  
+  const x = (index) =>
+    pad.left + (series.length > 1 ? (index / (series.length - 1)) * plotWidth : plotWidth / 2);
+  const y = (value) => pad.top + plotHeight - (peak > 0 ? (value / peak) * plotHeight : 0);
+
+  const line = series.map((point, index) => `${x(index)},${y(point.revenue)}`).join(" ");
+  const area = `${pad.left},${pad.top + plotHeight} ${line} ${pad.left + plotWidth},${pad.top + plotHeight}`;
+
+  // At 30 or 90 days every label will not fit; thin them out evenly.
+  const labelEvery = Math.ceil(series.length / 10);
+
   return (
-    <div className="card p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{title}</h3>
-      <div className="flex flex-col sm:flex-row items-center gap-6">
-        <svg viewBox="0 0 200 200" className="w-48 h-48 shrink-0">
-          {data.map((item, index) => {
-            const sliceAngle = total > 0 ? (item.value / total) * 360 : 0;
-            const startAngle = currentAngle;
-            const endAngle = currentAngle + sliceAngle;
-            currentAngle += sliceAngle;
-            
-            const start = getCoordinates(startAngle);
-            const end = getCoordinates(endAngle);
-            const largeArc = sliceAngle > 180 ? 1 : 0;
-            
-            const pathData = [
-              `M ${center} ${center}`,
-              `L ${start.x} ${start.y}`,
-              `A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`,
-              "Z",
-            ].join(" ");
-            
-            return (
-              <path
-                key={index}
-                d={pathData}
-                fill={colors[index % colors.length]}
-                stroke="white"
-                strokeWidth="2"
-                className="dark:stroke-slate-800 hover:opacity-80 transition-opacity"
-              />
-            );
-          })}
-          <circle cx={center} cy={center} r="45" fill="white" className="dark:fill-slate-800" />
-          <text x={center} y={center - 5} textAnchor="middle" className="text-lg font-bold fill-gray-900 dark:fill-white">
-            {total}
-          </text>
-          <text x={center} y={center + 12} textAnchor="middle" className="text-xs fill-gray-500 dark:fill-gray-400">
-            Total
-          </text>
-        </svg>
-        
-        <div className="space-y-2 w-full">
-          {data.map((item, index) => (
-            <div key={index} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
-                <span className="text-gray-700 dark:text-gray-300">{item.label}</span>
-              </div>
-              <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <Panel title={title} caption={caption} isEmpty={!hasData} emptyMessage={emptyMessage}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full overflow-visible"
+        role="img"
+        aria-label={title}
+      >
+        {[0, 1, 2, 3].map((step) => (
+          <line
+            key={step}
+            x1={pad.left}
+            x2={width - pad.right}
+            y1={pad.top + (step / 3) * plotHeight}
+            y2={pad.top + (step / 3) * plotHeight}
+            className="stroke-secondary-dark/50 dark:stroke-slate-800"
+            strokeWidth="1"
+          />
+        ))}
+
+        <polygon points={area} className="fill-primary/10" />
+        <polyline
+          points={line}
+          fill="none"
+          className="stroke-primary"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {series.map((point, index) => (
+          <g key={point.date}>
+            {point.orders > 0 && (
+              <circle cx={x(index)} cy={y(point.revenue)} r="3.5" className="fill-primary" />
+            )}
+            {index % labelEvery === 0 && (
+              <text
+                x={x(index)}
+                y={height - 8}
+                textAnchor="middle"
+                className="fill-gray-500 text-[11px] dark:fill-gray-400"
+              >
+                {shortDate(point.date, language)}
+              </text>
+            )}
+            <title>{`${point.date} — ${point.orders}`}</title>
+          </g>
+        ))}
+      </svg>
+    </Panel>
   );
 };
 
 const DashboardAnalytics = () => {
   const { language } = useLanguage();
-  const { stats, orders, products, categories } = useData();
   const { t } = useTranslations();
   const isRtl = language === "ar";
 
-  // Generate dynamic chart data from orders
-  const revenueByDay = useMemo(() => {
-    const days = {};
-    const now = new Date();
-    // Last 7 days
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const dayName = d.toLocaleDateString(isRtl ? "ar-EG" : "en-US", { weekday: "short" });
-      days[dateStr] = { label: dayName, value: 0 };
+  const [period, setPeriod] = useState("30d");
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState("loading");
+  const [error, setError] = useState("");
+
+  // One request per period change, and never a stale response overwriting a
+  // newer one when the admin clicks through the tabs quickly.
+  const requestRef = useRef(0);
+
+  const load = useCallback(async (which) => {
+    const ticket = ++requestRef.current;
+    setStatus((previous) => (previous === "ready" ? "refreshing" : "loading"));
+    setError("");
+
+    try {
+      const result = await fetchAnalytics(which);
+      if (ticket !== requestRef.current) return;
+      setData(result);
+      setStatus("ready");
+    } catch (caught) {
+      if (ticket !== requestRef.current) return;
+      setError(caught.message || (isRtl ? "تعذر تحميل الأرقام" : "Could not load the numbers"));
+      setStatus("error");
     }
-    
-    (orders || []).forEach(order => {
-      if (order?.date && days[order.date] && order.status !== "cancelled") {
-        days[order.date].value += order.total || 0;
-      }
-    });
-    
-    return Object.values(days);
-  }, [orders, isRtl]);
+  }, [isRtl]);
 
-  const ordersByStatus = useMemo(() => {
-    const counts = { pending: 0, confirmed: 0, preparing: 0, shipped: 0, delivered: 0, cancelled: 0 };
-    (orders || []).forEach(order => {
-      if (order?.status && counts[order.status] !== undefined) {
-        counts[order.status]++;
-      }
-    });
-    return Object.entries(counts)
-      .filter(([_, count]) => count > 0)
-      .map(([status, count]) => ({
-        label: isRtl 
-          ? { pending: "معلق", confirmed: "مؤكد", preparing: "قيد التحضير", shipped: "تم الشحن", delivered: "تم التوصيل", cancelled: "ملغي" }[status]
-          : status.charAt(0).toUpperCase() + status.slice(1),
-        value: count,
-      }));
-  }, [orders, isRtl]);
+  useEffect(() => {
+    load(period);
+  }, [load, period]);
 
-  const topCategories = useMemo(() => {
-    const catCounts = {};
-    (products || []).forEach(product => {
-      const catId = product?.category;
-      if (catId) {
-        catCounts[catId] = (catCounts[catId] || 0) + 1;
-      }
-    });
-    
-    return Object.entries(catCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([catId, count]) => {
-        const cat = (categories || []).find(c => c.id === catId);
-        return {
-          label: isRtl ? (cat?.nameAr || catId) : (cat?.nameEn || catId),
-          value: count,
-        };
-      });
-  }, [products, categories, isRtl]);
+  const periodLabel = useMemo(() => {
+    const match = PERIODS.find((p) => p.id === period);
+    return isRtl ? match?.labelAr : match?.labelEn;
+  }, [period, isRtl]);
 
-  const monthlyRevenue = useMemo(() => {
-    const months = {};
-    const monthNames = isRtl 
-      ? ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
-      : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    
-    (orders || []).forEach(order => {
-      if (order?.date && order.status !== "cancelled") {
-        const month = parseInt(order.date.split("-")[1]) - 1;
-        months[month] = (months[month] || 0) + (order.total || 0);
-      }
-    });
-    
-    return Object.entries(months)
-      .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-      .map(([month, value]) => ({
-        label: monthNames[parseInt(month)],
-        value,
-      }));
-  }, [orders, isRtl]);
+  const rangeCaption = useMemo(() => {
+    if (!data?.period) return periodLabel;
+    if (data.period.id === "all") return isRtl ? "كل الطلبات" : "All orders to date";
+    if (data.period.id === "today") return `${periodLabel} · ${data.period.endDate}`;
+    return `${data.period.startDate} → ${data.period.endDate}`;
+  }, [data, periodLabel, isRtl]);
+
+  const derived = useMemo(() => {
+    if (!data) return null;
+
+    const maxOf = (rows, key) => Math.max(...rows.map((row) => row[key] ?? 0), 0);
+
+    return {
+      topProducts: { rows: data.topProducts ?? [], max: maxOf(data.topProducts ?? [], "quantity") },
+      topCategories: { rows: data.topCategories ?? [], max: maxOf(data.topCategories ?? [], "quantity") },
+      paymentStatusBreakdown: {
+        rows: data.paymentStatusBreakdown ?? [],
+        max: maxOf(data.paymentStatusBreakdown ?? [], "count"),
+      },
+      paymentSplit: { rows: data.paymentSplit ?? [], max: maxOf(data.paymentSplit ?? [], "count") },
+    };
+  }, [data]);
+
+  const noOrders = isRtl ? "لا توجد طلبات في هذه الفترة" : "No orders in this period";
 
   return (
     <div className="space-y-6">
-      <div className="mb-6"><PageHeader title={t("analytics")} subtitle={language === "ar" ? "أرقام المتجر الحقيقية" : "Real numbers from your store"} /></div>
+      <PageHeader
+        eyebrow={rangeCaption}
+        title={t("analytics")}
+        subtitle={isRtl ? "أرقام محسوبة من الطلبات الفعلية" : "Computed from real order data"}
+      >
+        <SecondaryButton
+          onClick={() => load(period)}
+          disabled={status === "loading" || status === "refreshing"}
+          aria-label={isRtl ? "تحديث" : "Refresh"}
+        >
+          <RefreshCw size={16} className={status === "refreshing" ? "animate-spin" : ""} />
+          {isRtl ? "تحديث" : "Refresh"}
+        </SecondaryButton>
+      </PageHeader>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title={isRtl ? "الإيرادات الشهرية" : "Monthly Revenue"} value={formatPrice(stats.monthlyRevenue, language)} icon={DollarSign} color="green" />
-        <StatsCard title={isRtl ? "الإيرادات اليومية" : "Daily Revenue"} value={formatPrice(stats.dailyRevenue, language)} icon={TrendingUp} color="blue" />
-        <StatsCard title={isRtl ? "إجمالي الطلبات" : "Total Orders"} value={stats.totalOrders} icon={ShoppingCart} color="primary" />
-        <StatsCard title={isRtl ? "إجمالي المنتجات" : "Total Products"} value={stats.totalProducts} icon={Package} color="purple" />
+      {/* Period selector */}
+      <div
+        role="tablist"
+        aria-label={isRtl ? "الفترة الزمنية" : "Reporting period"}
+        className="flex flex-wrap gap-2"
+      >
+        {PERIODS.map((option) => {
+          const active = option.id === period;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setPeriod(option.id)}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? "bg-primary text-on-primary shadow-sm"
+                  : "border border-secondary-dark text-primary hover:bg-secondary-light dark:border-slate-700 dark:text-gray-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              {isRtl ? option.labelAr : option.labelEn}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Second Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title={isRtl ? "الأقسام" : "Categories"} value={stats.totalCategories} icon={Tag} color="orange" />
-        <StatsCard title={isRtl ? "المنتجات غير المتوفرة" : "Out of Stock"} value={stats.outOfStock} icon={Package} color="red" />
-        <StatsCard title={isRtl ? "العروض النشطة" : "Active Offers"} value={stats.activeOffers} icon={Activity} color="teal" />
-        <StatsCard title={isRtl ? "الماركات" : "Brands"} value={stats.totalBrands} icon={Users} color="indigo" />
-      </div>
+      {status === "loading" && (
+        <div className="space-y-6" aria-busy="true">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((n) => (
+              <Card key={n} className="h-28 animate-pulse bg-secondary-dark/30 dark:bg-slate-800" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {[0, 1].map((n) => (
+              <Card key={n} className="h-64 animate-pulse bg-secondary-dark/30 dark:bg-slate-800" />
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SimpleLineChart 
-          data={revenueByDay} 
-          title={isRtl ? "الإيرادات (آخر 7 أيام)" : "Revenue (Last 7 Days)"} 
-          color="#004741" 
-          language={language}
-        />
-        <SimpleBarChart 
-          data={monthlyRevenue} 
-          title={isRtl ? "الإيرادات الشهرية" : "Monthly Revenue"} 
-          color="#10b981" 
-          language={language}
-        />
-      </div>
+      {status === "error" && (
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            message={error}
+            action={
+              <SecondaryButton onClick={() => load(period)}>
+                {isRtl ? "إعادة المحاولة" : "Try again"}
+              </SecondaryButton>
+            }
+          />
+        </Card>
+      )}
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SimpleDonutChart 
-          data={ordersByStatus} 
-          title={isRtl ? "حالات الطلبات" : "Order Statuses"} 
-        />
-        <SimpleBarChart 
-          data={topCategories} 
-          title={isRtl ? "أكثر الأقسام منتجات" : "Top Categories by Products"} 
-          color="#8b5cf6" 
-          language={language}
-        />
-      </div>
+      {data && derived && (status === "ready" || status === "refreshing") && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label={isRtl ? "الإيرادات" : "Revenue"}
+              value={formatPrice(data.revenue.total, language)}
+              icon={DollarSign}
+              iconClass="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+            >
+              <p className="text-xs text-gray-500 dark:text-gray-400">{rangeCaption}</p>
+            </MetricCard>
+
+            <MetricCard
+              label={isRtl ? "الطلبات" : "Orders"}
+              value={data.revenue.orderCount}
+              icon={ShoppingCart}
+              iconClass="bg-primary/10 text-primary dark:bg-primary/20"
+            >
+              <p className="text-xs text-gray-500 dark:text-gray-400">{rangeCaption}</p>
+            </MetricCard>
+
+            <MetricCard
+              label={isRtl ? "متوسط الطلب" : "Average order"}
+              value={formatPrice(data.revenue.averageOrderValue, language)}
+              icon={Receipt}
+              iconClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+            >
+              <p className="text-xs text-gray-500 dark:text-gray-400">{rangeCaption}</p>
+            </MetricCard>
+
+            <MetricCard
+              label={isRtl ? "الشحن المحصّل" : "Shipping collected"}
+              value={formatPrice(data.revenue.shipping, language)}
+              icon={Truck}
+              iconClass="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+            >
+              <p className="text-xs text-gray-500 dark:text-gray-400">{rangeCaption}</p>
+            </MetricCard>
+          </div>
+
+          <TrendChart
+            series={data.series ?? []}
+            title={isRtl ? "الإيرادات عبر الوقت" : "Revenue over time"}
+            caption={rangeCaption}
+            language={language}
+            emptyMessage={noOrders}
+          />
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Panel
+              title={isRtl ? "الأكثر مبيعاً" : "Top selling products"}
+              caption={`${isRtl ? "بالكمية" : "By quantity"} · ${rangeCaption}`}
+              isEmpty={derived.topProducts.rows.length === 0}
+              emptyMessage={noOrders}
+            >
+              <div className="space-y-4">
+                {derived.topProducts.rows.map((row) => (
+                  <BarRow
+                    key={row.id}
+                    label={isRtl ? row.nameAr : row.nameEn}
+                    value={row.quantity}
+                    max={derived.topProducts.max}
+                    display={`${row.quantity} · ${formatPrice(row.revenue, language)}`}
+                  />
+                ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title={isRtl ? "الأقسام الأكثر مبيعاً" : "Top categories"}
+              caption={`${isRtl ? "بالكمية المباعة" : "By units sold"} · ${rangeCaption}`}
+              isEmpty={derived.topCategories.rows.length === 0}
+              emptyMessage={noOrders}
+            >
+              <div className="space-y-4">
+                {derived.topCategories.rows.map((row) => (
+                  <BarRow
+                    key={row.id ?? "none"}
+                    label={isRtl ? row.nameAr : row.nameEn}
+                    value={row.quantity}
+                    max={derived.topCategories.max}
+                    tint="bg-accent"
+                    display={`${row.quantity} · ${formatPrice(row.revenue, language)}`}
+                  />
+                ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title={isRtl ? "حالة الدفع" : "Payment status"}
+              caption={rangeCaption}
+              isEmpty={derived.paymentStatusBreakdown.rows.length === 0}
+              emptyMessage={noOrders}
+            >
+              <div className="space-y-4">
+                {derived.paymentStatusBreakdown.rows.map((row) => (
+                  <BarRow
+                    key={row.status}
+                    label={PAYMENT_STATUS_LABELS[row.status]?.[isRtl ? "ar" : "en"] ?? row.status}
+                    value={row.count}
+                    max={derived.paymentStatusBreakdown.max}
+                    display={row.count}
+                    tint={row.status === "paid" ? "bg-green-500" : "bg-amber-500"}
+                  />
+                ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title={isRtl ? "طرق الدفع" : "Payment methods"}
+              caption={rangeCaption}
+              isEmpty={derived.paymentSplit.rows.length === 0}
+              emptyMessage={noOrders}
+            >
+              <div className="space-y-4">
+                {derived.paymentSplit.rows.map((row) => {
+                  const meta = PAYMENT_META[row.method];
+                  return (
+                    <BarRow
+                      key={row.method}
+                      label={meta ? (isRtl ? meta.labelAr : meta.labelEn) : row.method}
+                      value={row.count}
+                      max={derived.paymentSplit.max}
+                      tint="bg-accent"
+                      display={`${row.count} · ${formatPrice(row.revenue, language)}`}
+                    />
+                  );
+                })}
+              </div>
+            </Panel>
+          </div>
+
+          {/* Catalogue counts are a snapshot of the shop right now, not of the
+              selected window — labelled so the two are never read as one. */}
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4">
+              <h3 className="font-display text-lg font-semibold text-primary dark:text-white">
+                {isRtl ? "الكتالوج" : "Catalogue"}
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                {isRtl ? "الوضع الحالي، وليس فترة التقرير" : "Current state, not the reporting period"}
+              </p>
+            </div>
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              {[
+                { key: "products", icon: Package, labelAr: "المنتجات", labelEn: "Products" },
+                { key: "outOfStock", icon: AlertTriangle, labelAr: "غير متوفر", labelEn: "Out of stock" },
+                { key: "categories", icon: BarChart3, labelAr: "الأقسام", labelEn: "Categories" },
+                { key: "brands", icon: BarChart3, labelAr: "الماركات", labelEn: "Brands" },
+                { key: "activeOffers", icon: BarChart3, labelAr: "عروض نشطة", labelEn: "Active offers" },
+              ].map(({ key, icon: Icon, labelAr, labelEn }) => (
+                <div key={key} className="rounded-xl bg-secondary-light/70 p-4 dark:bg-slate-800/60">
+                  <dt className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    <Icon size={14} />
+                    {isRtl ? labelAr : labelEn}
+                  </dt>
+                  <dd className="mt-1 text-2xl font-bold text-primary dark:text-white">
+                    {data.catalogue?.[key] ?? 0}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

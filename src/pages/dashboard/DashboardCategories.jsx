@@ -11,10 +11,9 @@ import { PageHeader } from "../../components/dashboard/ui";
 
 const CategoryForm = ({ formData, setFormData, language, handleSave, onCancel, t, isAdd }) => (
   <form onSubmit={handleSave} className="space-y-4">
-    <div>
-      <label className="block text-sm font-medium mb-1">ID</label>
-      <input required value={formData.id} onChange={(e) => setFormData(p => ({ ...p, id: e.target.value }))} className="input-field" placeholder="vapes, pods, etc." />
-    </div>
+    {/* The manual ID box that used to sit here was a leftover from the
+        Firestore era. Ids are AUTO_INCREMENT now and the API ignores anything
+        the client sends, so the field only ever misled. */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <label className="block text-sm font-medium mb-1">{language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}</label>
@@ -48,13 +47,14 @@ const DashboardCategories = () => {
   const [editModal, setEditModal] = useState({ open: false, category: null });
   const [addModal, setAddModal] = useState(false);
 
-  const emptyCategory = { id: "", nameAr: "", nameEn: "", descriptionAr: "", descriptionEn: "", image: "", order: 1, productCount: 0 };
+  const emptyCategory = { nameAr: "", nameEn: "", descriptionAr: "", descriptionEn: "", image: "", order: 1, productCount: 0 };
   const [formData, setFormData] = useState(emptyCategory);
 
   const handleSave = (e) => {
     e.preventDefault();
     if (addModal) {
-      addCategory({ ...formData, id: formData.id || Date.now().toString() });
+      // No client-side id: the database assigns it.
+      addCategory(formData);
       setAddModal(false);
     } else {
       updateCategory(editModal.category.id, formData);

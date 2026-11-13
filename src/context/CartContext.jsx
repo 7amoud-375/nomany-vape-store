@@ -1,12 +1,20 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
-import { getLocalStorage, setLocalStorage, effectivePrice, toNumber } from "../utils";
+import {
+  getLocalStorage,
+  setLocalStorage,
+  effectivePrice,
+  toNumber,
+  hasFlavors,
+  normaliseFlavor,
+  cartLineKey,
+} from "../utils";
 import { LOCAL_STORAGE_KEYS } from "../constants";
 import { useData } from "./DataContext";
 import toast from "react-hot-toast";
 
 const CartContext = createContext();
 
-/** Matches the per-line cap enforced by api/paymob.php. */
+/** Matches the per-line cap enforced by the orders endpoint in api/index.php. */
 const MAX_QUANTITY_PER_ITEM = 99;
 
 export const useCart = () => {
@@ -20,8 +28,13 @@ export const useCart = () => {
 export const CartProvider = ({ children }) => {
   const { products } = useData();
 
+  // Carts saved before flavours were selectable have no lineKey; derive one so
+  // every line can still be updated and removed.
   const [cartItems, setCartItems] = useState(() =>
-    getLocalStorage(LOCAL_STORAGE_KEYS.CART, [])
+    getLocalStorage(LOCAL_STORAGE_KEYS.CART, []).map((item) => ({
+      ...item,
+      lineKey: item.lineKey ?? cartLineKey(item.id, item.selectedFlavor),
+    }))
   );
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -57,7 +70,12 @@ export const CartProvider = ({ children }) => {
           current.availability !== item.availability
         ) {
           changed = true;
-          refreshed.push({ ...current, quantity: item.quantity });
+          refreshed.push({
+            ...current,
+            quantity: item.quantity,
+            selectedFlavor: item.selectedFlavor,
+            lineKey: item.lineKey,
+          });
         } else {
           refreshed.push(item);
         }
@@ -67,31 +85,41 @@ export const CartProvider = ({ children }) => {
     });
   }, [products]);
 
-  const addToCart = useCallback((product, quantity = 1) => {
-    if (!product?.id) return;
+  /**
+   * Returns false when nothing was added, so callers can react — a product
+   * with flavours needs one chosen, which only the product page offers.
+   */
+  const addToCart = useCallback((product, quantity = 1, flavor = null) => {
+    if (!product?.id) return false;
 
     if (product.availability === false) {
       toast.error("This product is out of stock");
-      return;
+      return false;
     }
 
+    if (hasFlavors(product) && !flavor) {
+      return false;
+    }
+
+    const selectedFlavor = flavor ? normaliseFlavor(flavor) : null;
+    const lineKey = cartLineKey(product.id, selectedFlavor);
     let capped = false;
 
     setCartItems((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((item) => item.lineKey === lineKey);
 
       if (existing) {
         const wanted = existing.quantity + quantity;
         const next = Math.min(wanted, MAX_QUANTITY_PER_ITEM);
         capped = wanted > next;
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: next } : item
+          item.lineKey === lineKey ? { ...item, quantity: next } : item
         );
       }
 
       const next = Math.min(Math.max(1, quantity), MAX_QUANTITY_PER_ITEM);
       capped = quantity > next;
-      return [...prev, { ...product, quantity: next }];
+      return [...prev, { ...product, quantity: next, selectedFlavor, lineKey }];
     });
 
     if (capped) {
@@ -99,19 +127,20 @@ export const CartProvider = ({ children }) => {
     } else {
       toast.success("Added to cart!");
     }
+    return true;
   }, []);
 
-  const removeFromCart = useCallback((productId) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== productId));
+  const removeFromCart = useCallback((lineKey) => {
+    setCartItems((prev) => prev.filter((item) => item.lineKey !== lineKey));
     toast.success("Removed from cart");
   }, []);
 
   const updateQuantity = useCallback(
-    (productId, quantity) => {
+    (lineKey, quantity) => {
       const wanted = toNumber(quantity, 0);
 
       if (wanted < 1) {
-        removeFromCart(productId);
+        removeFromCart(lineKey);
         return;
       }
       if (wanted > MAX_QUANTITY_PER_ITEM) {
@@ -120,7 +149,7 @@ export const CartProvider = ({ children }) => {
 
       const next = Math.min(wanted, MAX_QUANTITY_PER_ITEM);
       setCartItems((prev) =>
-        prev.map((item) => (item.id === productId ? { ...item, quantity: next } : item))
+        prev.map((item) => (item.lineKey === lineKey ? { ...item, quantity: next } : item))
       );
     },
     [removeFromCart]

@@ -1,175 +1,186 @@
 # Deploying to nomany-vape-store.com (Hostinger)
 
-Upload package: `nomany-deploy.zip` — 55 files, 387 KB.
-It contains the built site **and** the PHP API, laid out exactly as the server
-expects. It deliberately contains **no `.env` file**; you create that on the
-server in step 3 so your Paymob key is never sent through a browser upload.
+Upload package: `nomany-deploy.zip` — the built site **and** the PHP API, laid
+out exactly as the server expects.
+
+It deliberately contains **no `api/.env`**: that file holds the database
+password and the JWT secret, and it is created once on the server, never sent
+through a browser upload.
+
+Two situations, and they are not the same:
+
+- **[Updating the live site](#updating-the-live-site)** — the shop is already
+  running and the admin has entered products. This is the normal case.
+- **[First install](#first-install)** — an empty `public_html`.
 
 ---
 
-## 1. Upload and extract
+## Updating the live site
 
-hPanel → **Files → File Manager** → open `public_html`.
+**Nothing here touches your data.** Products, categories, orders and settings
+live in MySQL, not in files. The package does not contain a `.sql` file and the
+API never drops or empties a table — on boot it only creates missing tables and
+adds missing columns.
 
-If there is a default `index.html` or a Hostinger placeholder page in there,
-delete it first.
+### What must survive the update
 
-Upload `nomany-deploy.zip`, then right-click it → **Extract** → into
-`public_html`. Delete the zip afterwards.
+| On the server | Holds | In the zip? |
+| --- | --- | --- |
+| The MySQL database | Products, orders, settings, the admin account | No — never touched |
+| `public_html/uploads/` | Every product image the admin uploaded | No — must be left alone |
+| `public_html/api/.env` | DB password, JWT secret | No — must be left alone |
 
-You should end up with:
+> **Do not "empty `public_html` and re-upload".** That deletes `uploads/` and
+> `api/.env`: every product keeps its database row but loses its image, and the
+> API stops answering until the `.env` is rebuilt. Overwrite in place instead,
+> exactly as below.
 
-```
-public_html/
-├── .htaccess
-├── index.html
-├── assets/
-└── api/
-    ├── .htaccess
-    ├── callback.php
-    ├── paymob.php
-    ├── verify.php
-    ├── vodafone.php
-    ├── lib/
-    └── data/
-```
+> **The folder-rename trap.** Hostinger's File Manager does not merge a
+> extracted folder into an existing one of the same name — it extracts
+> alongside it under a new name (`api.5050`, `assets.8755`). The site keeps
+> running the old folder and you think you deployed when you did not. Avoid it
+> by never extracting a folder that already exists: delete `assets` first, and
+> upload changed PHP as individual files rather than as an `api/` folder.
 
-> File Manager hides dotfiles by default. Turn on **Settings → Show hidden
-> files** or you will think `.htaccess` failed to extract.
+### Steps
 
----
+1. **Back up the database first.** hPanel → **Databases → phpMyAdmin** → select
+   the database → **Export** → Go. Keep the `.sql` file. It takes a minute and
+   it is the difference between a bad deploy and a lost catalogue.
 
-## 2. Permissions
+2. hPanel → **Files → File Manager** → open `public_html`.
 
-Right-click `api/data` → **Permissions** → set to `700`.
+3. Delete the **`assets` folder only** — and any stray `assets.NNNN` /
+   `api.NNNN` left by an earlier extract. Asset filenames carry a content hash,
+   so old bundles are never overwritten; they just accumulate and eat the disk
+   quota. Leave `uploads/`, `api/` and `api/.env` alone.
 
-PHP writes payment records, rate-limit counters and its token cache there. If it
-is not writable, payments cannot be recorded.
+4. **The site:** upload `nomany-site-only.zip` (`npm run package -- --site-only`)
+   into `public_html`, right-click → **Extract** → into `public_html`, confirm
+   **Overwrite**, then delete the zip. It contains no `api/` folder, so it
+   cannot collide with the live API.
 
----
+   Overwritten: `index.html`, `.htaccess`, `favicon.svg`, `robots.txt`, and a
+   freshly created `assets/`.
+   Untouched: `uploads/`, `api/`, the database.
 
-## 3. Create `api/.env`
+   > File Manager hides dotfiles by default. Turn on **Settings → Show hidden
+   > files**, or you will think `.htaccess` failed to extract.
 
-In File Manager, inside `api/`, click **New File**, name it `.env`, and paste
-the block below. Fill in the four blanks from the Paymob dashboard.
+5. **The API, only if the PHP changed.** Check `git diff` against the last
+   deploy and upload just the files that differ, straight into
+   `public_html/api/` (or `api/lib/`), overwriting them. Individual *files*
+   overwrite cleanly — it is only *folders* that get renamed.
 
-```ini
-PAYMOB_API_KEY = "PASTE_FROM_YOUR_LOCAL_api/.env"
-PAYMOB_IFRAME_ID = "PASTE_FROM_YOUR_LOCAL_api/.env"
+   Use the full `nomany-deploy.zip` only for a first install, or extract it
+   somewhere else and move the PHP files across by hand.
 
-PAYMOB_INTEGRATION_ID_CARD = ""
-PAYMOB_INTEGRATION_ID_VODAFONE = ""
-PAYMOB_HMAC_SECRET = ""
+6. **Check it, with a hard refresh** (`Ctrl+Shift+R` — your browser caches the
+   old bundle):
 
-FIREBASE_PROJECT_ID = "nomany-vape-store"
-FIREBASE_SERVICE_ACCOUNT = ""
+   - The homepage loads and shows the admin's products — count them against
+     `https://nomany-vape-store.com/api/products` before and after.
+   - No new `assets.NNNN` or `api.NNNN` folder appeared. If one did, the
+     extractor renamed rather than overwrote, and the site is still serving the
+     old files — delete the stray folder and redo step 3.
+   - A liquid's page shows its flavours as buttons, and adding to the cart
+     without choosing one is refused.
+   - `https://nomany-vape-store.com/api/.env` returns **403 Forbidden**.
+     If it shows the file, stop — the database password is public, and
+     Hostinger is not honouring `.htaccess`. Ask support for `AllowOverride All`.
+   - A product image still loads (proves `uploads/` survived).
+   - Dashboard → Orders still lists the existing orders.
 
-APP_ALLOWED_ORIGINS = "https://nomany-vape-store.com,https://www.nomany-vape-store.com"
-```
+### If something looks wrong
 
-The first two values are already in your local `api/.env` — copy them across.
-
-**The three Paymob blanks are why card payments will not work yet.** Your local
-config still has `YOUR_CARD_INTEGRATION_ID` as a placeholder and no HMAC secret
-at all. Get all three from Paymob → **Developers → Payment Integrations**.
-
----
-
-## 4. Verify the secrets are not public
-
-Do this **before** announcing the site. In a browser:
-
-```
-https://nomany-vape-store.com/api/.env
-```
-
-You need a **403 Forbidden**. If it shows the file contents, stop — your Paymob
-key is public. That means Hostinger is not honouring `.htaccess`; contact
-support and ask for `AllowOverride All` on the domain.
-
-Also check:
-
-```
-https://nomany-vape-store.com/products/1
-```
-
-If that 404s instead of loading the product, the root `.htaccess` did not
-extract (see the hidden-files note in step 1).
+The previous version is one rebuild away: `git checkout` the last deployed
+commit, `npm run build`, `npm run package`, and extract that zip the same way.
+Because the data lives in MySQL and `uploads/`, rolling the files back does not
+cost you a single product or order.
 
 ---
 
-## 5. Firebase
+## First install
 
-Two things, both from your own machine — neither can be done from hPanel.
+Only for an empty `public_html`.
 
-**Deploy the security rules.** Until you do, the database is wide open and
-anyone can promote themselves to admin:
+1. **Create the database.** hPanel → **Databases → MySQL Databases** → create a
+   database and a user, and note the name, user and password.
 
-```bash
-npx firebase login
-npx firebase deploy --only firestore:rules
-```
+2. **Upload.** Extract `nomany-deploy.zip` into `public_html` (see step 4
+   above). You should end up with:
 
-**Make yourself admin.** Firebase console → Firestore → `users` → your document
-→ set `role` to `admin`. The new rules block doing this from the app, on
-purpose.
+   ```
+   public_html/
+   ├── .htaccess
+   ├── index.html
+   ├── assets/
+   └── api/
+       ├── .htaccess
+       ├── .env.example
+       ├── index.php
+       ├── upload.php
+       ├── sitemap.php
+       ├── lib/
+       └── data/
+   ```
 
----
+3. **Permissions.** Right-click `api/data` → **Permissions** → `700`. PHP writes
+   its rate-limit counters there.
 
-## 6. Service account (only needed for card/wallet payments)
+4. **Create `api/.env`.** In File Manager, inside `api/`, **New File** named
+   `.env`, then paste `api/.env.example` and fill it in. Keep every value in
+   double quotes.
 
-Firebase console → Project settings → Service accounts → **Generate new private
-key**.
+   - `DB_NAME` / `DB_USER` / `DB_PASS` — from step 1.
+   - `JWT_SECRET` — at least 32 characters. The API refuses to start without
+     it rather than falling back to something guessable.
+     Generate one: `php -r "echo bin2hex(random_bytes(32));"`
+   - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — the first admin, created on first
+     boot. **Delete these two lines once you have signed in**, then upload the
+     edited `.env` again.
 
-Upload the JSON **outside** `public_html` — e.g. create `/home/uXXXXXXX/secrets/`
-and put it there. Then set `FIREBASE_SERVICE_ACCOUNT` in `api/.env` to that
-absolute path.
+   The tables are created automatically on the first request. There is no
+   install script to run.
 
-If it sits inside `public_html`, anyone can download full admin access to your
-database.
+5. **Verify** `https://nomany-vape-store.com/api/.env` returns **403**, and that
+   `https://nomany-vape-store.com/products/1` loads the product instead of a 404
+   (a 404 means the root `.htaccess` did not extract — check hidden files).
 
----
-
-## 7. Paymob callback
-
-Paymob dashboard → Developers → Payment Integrations → set **Transaction
-processed callback** to:
-
-```
-https://nomany-vape-store.com/api/callback.php
-```
-
-Copy the **HMAC secret** from that screen into `PAYMOB_HMAC_SECRET`.
-
-Without it, no payment is ever confirmed. That is deliberate — it is what stops
-someone marking their own order paid.
-
----
-
-## 8. Seed the catalogue
-
-Sign in as admin, then save one product from **Dashboard → Products** and hit
-save once on **Dashboard → Settings**.
-
-That writes `store/products` and `store/settings` to Firestore.
-`api/paymob.php` prices every cart from those two documents, so **card payments
-fail until both exist**.
+6. **Sign in** at the admin path (`ADMIN_LOGIN_PATH` in
+   `src/constants/index.js` — deliberately not a guessable `/admin`) and add the
+   catalogue from the dashboard.
 
 ---
 
-## Order of operations
+## Payments
 
-1. Steps 1–4 → **the shop is live and COD works**
-2. Step 5 → the database is secured *(do not skip)*
-3. Steps 6–8 → card and Vodafone Cash start working
+There is no payment gateway and no keys in `.env`. The shop takes cash on
+delivery plus manual InstaPay and Vodafone Cash transfers: the customer
+transfers the money themselves and sends the receipt over WhatsApp, and the
+admin marks the order paid from **Dashboard → Orders**.
+
+The transfer number for each method is edited in **Dashboard → Settings →
+Payment**, not in any file.
 
 ---
 
-## Redeploying later
+## Rebuilding the package
 
 ```bash
 npm run build
+npm run package
 ```
 
-Then re-upload the contents of `dist/` to `public_html`. The `api/` folder and
-`api/.env` stay as they are unless the PHP changed.
+`npm run package` writes `nomany-deploy.zip` and refuses to produce one that
+contains a `.env` or that would extract without folders on Linux.
+
+## Deploying over FTP instead
+
+```bash
+npm run deploy -- --api
+```
+
+Reads `.env.deploy` (gitignored). It replaces `assets/`, `index.html`,
+`.htaccess` and — with `--api` — the PHP files, and never touches `api/.env`,
+`uploads/` or the database. Drop `--api` when only the site changed.

@@ -12,13 +12,20 @@
 # The package deliberately excludes api/.env: secrets are created directly on
 # the server, never shipped through a browser upload.
 
+# -SiteOnly leaves api/ out. Hostinger's File Manager renames a folder that
+# already exists instead of merging into it -- that is where the stray
+# "api.5050" and "assets.8755" on the server came from. When only the site
+# changed, a package without api/ cannot collide with the live api/ folder,
+# and api/.env is never even near the upload.
+param([switch]$SiteOnly)
+
 $ErrorActionPreference = "Stop"
 
 $root    = Split-Path -Parent $PSScriptRoot
 $dist    = Join-Path $root "dist"
 $api     = Join-Path $root "api"
 $staging = Join-Path $root "build-package"
-$zipPath = Join-Path $root "nomany-deploy.zip"
+$zipPath = Join-Path $root $(if ($SiteOnly) { "nomany-site-only.zip" } else { "nomany-deploy.zip" })
 
 if (-not (Test-Path $dist)) {
     throw "dist/ not found. Run 'npm run build' first."
@@ -30,17 +37,21 @@ New-Item -ItemType Directory -Path $staging | Out-Null
 
 Copy-Item -Path (Join-Path $dist "*") -Destination $staging -Recurse -Force
 
-$apiDest = Join-Path $staging "api"
-New-Item -ItemType Directory -Path (Join-Path $apiDest "lib")  -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $apiDest "data") -Force | Out-Null
+if (-not $SiteOnly) {
+    $apiDest = Join-Path $staging "api"
+    New-Item -ItemType Directory -Path (Join-Path $apiDest "lib")  -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $apiDest "data") -Force | Out-Null
 
-foreach ($f in @(".htaccess", ".env.example", "index.php", "upload.php", "migrate-from-firestore.php")) {
-    Copy-Item (Join-Path $api $f) $apiDest -Force
+    # migrate-from-firestore.php is intentionally not packaged -- it is a one-off
+    # importer, not part of the running site.
+    foreach ($f in @(".htaccess", ".env.example", "index.php", "upload.php", "sitemap.php")) {
+        Copy-Item (Join-Path $api $f) $apiDest -Force
+    }
+    foreach ($f in @("bootstrap.php", "db.php", "auth.php", "payments.php")) {
+        Copy-Item (Join-Path $api "lib\$f") (Join-Path $apiDest "lib") -Force
+    }
+    Copy-Item (Join-Path $api "data\.htaccess") (Join-Path $apiDest "data") -Force
 }
-foreach ($f in @("bootstrap.php", "db.php", "auth.php", "payments.php")) {
-    Copy-Item (Join-Path $api "lib\$f") (Join-Path $apiDest "lib") -Force
-}
-Copy-Item (Join-Path $api "data\.htaccess") (Join-Path $apiDest "data") -Force
 
 # --- Zip it with POSIX separators -----------------------------------------
 Add-Type -AssemblyName System.IO.Compression
@@ -73,9 +84,15 @@ try {
     $htaccess    = @($zip.Entries | Where-Object { $_.FullName -like '*.htaccess' }).Count
     $envLeak     = @($zip.Entries | Where-Object { $_.FullName -like '*.env' }).Count
 
+    # The site alone ships one .htaccess (the SPA rewrite); with the API there
+    # are three (root, api/, api/data/).
+    $expectedHtaccess = if ($SiteOnly) { 1 } else { 3 }
+    $apiEntries = @($zip.Entries | Where-Object { $_.FullName -like 'api/*' }).Count
+
     if ($backslashes -gt 0) { throw "$backslashes entries contain a backslash - Linux will not create folders." }
-    if ($htaccess -ne 3)    { throw "Expected 3 .htaccess files, found $htaccess." }
+    if ($htaccess -ne $expectedHtaccess) { throw "Expected $expectedHtaccess .htaccess files, found $htaccess." }
     if ($envLeak -gt 0)     { throw "A .env file got into the package - remove it." }
+    if ($SiteOnly -and $apiEntries -gt 0) { throw "-SiteOnly package contains $apiEntries api/ entries." }
 
     Write-Output "OK  $($zip.Entries.Count) entries, $htaccess .htaccess files, no .env, POSIX separators"
     Write-Output "    $zipPath"

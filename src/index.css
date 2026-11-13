@@ -1,73 +1,194 @@
-/* Google Fonts — MUST be first before any other rules */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Aref+Ruqaa:wght@400;700&display=swap');
+/* Google Fonts — MUST be first before any other rules.
+   Aetheris Luxe specifies IBM Plex Sans for both scripts; the Arabic cut shares
+   the family's vertical metrics, so bilingual lines sit on the same baseline. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+ * Aetheris Luxe.
+ *
+ * A surface-tonal system: depth comes from stepping the background tone rather
+ * than from heavy shadows, so panels layer without visual noise. Anchored by
+ * Cyprus (deep teal) against Sand (warm neutral).
+ * ------------------------------------------------------------------------ */
 @theme {
+  /* Brand — Cyprus. */
   --color-primary: #004741;
   --color-primary-light: #006b62;
-  --color-primary-dark: #00332e;
+  --color-primary-dark: #002f2a;
+
+  /* Text that sits ON a primary fill. White in light mode; the dark theme
+     flips it, because dark-mode primary is a light mint that white fails on. */
+  --color-on-primary: #ffffff;
+
+  /* Sand — the "gallery" base that keeps the UI from feeling clinical. */
   --color-secondary: #F0EDE4;
   --color-secondary-light: #FAF9F6;
-  --color-secondary-dark: #E0DDD4;
-  --color-accent: #D4A843;
-  --color-accent-light: #E8C76A;
-  --color-accent-dark: #B8922E;
+  --color-secondary-dark: #E0DDD5;
 
-  /* Surfaces, so every panel does not pick its own slate shade by hand. */
-  --color-surface: #ffffff;
-  --color-surface-raised: #FAF9F6;
-  --color-hairline: #f1f1ef;
+  /* Bronze Mist — muted metallic for accents and secondary iconography. */
+  --color-accent: #B8922E;
+  --color-accent-light: #D4A843;
+  --color-accent-dark: #8A6D1F;
 
-  /* Display face for dashboard headings. Latin only — the RTL rule below
-     swaps in an Arabic display face, since Fraunces has no Arabic glyphs and
-     would silently fall back to the body font mid-heading. */
-  --font-display: 'Fraunces', Georgia, serif;
+  /* Surface-tonal ladder: base → card → elevated → highest. */
+  --color-surface: #fcf9f8;
+  --color-surface-lowest: #ffffff;
+  --color-surface-low: #f6f3f2;
+  --color-surface-raised: #f0eded;
+  --color-surface-high: #eae7e7;
+  --color-surface-highest: #e5e2e1;
+
+  /* Text and strokes. */
+  --color-ink: #1c1b1b;
+  --color-ink-muted: #404947;
+  --color-outline: #707977;
+  --color-outline-variant: #bfc8c6;
+  --color-hairline: #E0DDD5;
+
+  /* Semantic. */
+  --color-danger: #ba1a1a;
+  --color-danger-container: #ffdad6;
+  --color-on-danger-container: #93000a;
+
+  /*
+   * Shape language: "Soft-Precision". The scale is remapped rather than
+   * rewritten across the codebase — 4px for controls, 8px for cards and
+   * containers — so existing rounded-* classes land on the new geometry.
+   * rounded-full stays a true pill, which the spec reserves for tags.
+   */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.5rem;
+  --radius-3xl: 0.75rem;
+
+  /* One family for everything; headlines differ by weight and tracking. */
+  --font-display: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+
+  /*
+   * The neutral scales are remapped onto Aetheris rather than replaced call by
+   * call. The codebase already expresses every border, muted label and dark
+   * panel with the gray and slate ramps; redefining them here moves all of it
+   * onto the warm palette at once, instead of editing several hundred class
+   * strings and missing some.
+   *
+   * Tailwind's stock slate is blue-tinted (#0f172a). Against Aetheris' warm
+   * near-black that reads as two different themes fighting, which is exactly
+   * the inconsistency this pass exists to remove.
+   */
+  --color-gray-50: #fcf9f8;
+  --color-gray-100: #f0eded;
+  --color-gray-200: #e5e2e1;
+  --color-gray-300: #cfd6d4;
+  --color-gray-400: #909997;
+  --color-gray-500: #707977;
+  --color-gray-600: #5f5f58;
+  --color-gray-700: #404947;
+  --color-gray-800: #2b2f2e;
+  --color-gray-900: #1c1b1b;
+
+  --color-slate-50: #f6f3f2;
+  --color-slate-100: #e1e3e3;
+  --color-slate-200: #d5dbd9;
+  --color-slate-300: #bfc8c6;
+  --color-slate-400: #899391;
+  --color-slate-500: #5f6b68;
+  --color-slate-600: #3f4947;
+  --color-slate-700: #2b2f2e;
+  --color-slate-800: #1e2120;
+  --color-slate-900: #111414;
+  --color-slate-950: #0c0e0e;
 }
 
-[dir="rtl"] .font-display {
-  font-family: 'Aref Ruqaa', 'Cairo', Georgia, serif;
+/* Headlines: Medium with tighter tracking for the "locked-in" look. */
+.font-display,
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 /*
  * Dark theme.
  *
- * The brand teal (#004741) is almost black — on a dark background a
- * `bg-primary` button barely separated from the page and `text-primary` was
- * effectively invisible. Redefining the variables here (rather than sprinkling
- * dark: overrides through every component) lifts the whole palette at once, so
- * existing `bg-primary` / `text-primary` / `border-primary` classes all adapt.
+ * Cyprus is almost black, so on a dark page a `bg-primary` button barely
+ * separated from the background and `text-primary` was invisible. The whole
+ * palette is redefined here rather than sprinkling dark: overrides through
+ * every component, so existing bg-/text-/border-primary classes all adapt.
  */
 .dark {
-  --color-primary: #2eb9a7;
-  --color-primary-light: #4fd3c0;
-  --color-primary-dark: #1c8b7d;
+  --color-primary: #97d2c9;
+  --color-primary-light: #b3eee5;
+  --color-primary-dark: #005049;
+  --color-on-primary: #003732;
 
-  --color-accent: #E0B75A;
-  --color-accent-light: #F0CE7E;
-  --color-accent-dark: #B8922E;
+  --color-accent: #d8c5a2;
+  --color-accent-light: #f1e0c5;
+  --color-accent-dark: #b7a88f;
 
-  --color-surface: #0f172a;
-  --color-surface-raised: #1e293b;
-  --color-hairline: #1e293b;
+  --color-secondary: #1e2120;
+  --color-secondary-light: #111414;
+  --color-secondary-dark: #3f4947;
+
+  --color-surface: #111414;
+  --color-surface-lowest: #0c0e0e;
+  --color-surface-low: #1a1c1c;
+  --color-surface-raised: #1e2120;
+  --color-surface-high: #2b2f2e;
+  --color-surface-highest: #333b3a;
+
+  --color-ink: #e1e3e3;
+  --color-ink-muted: #bfc8c6;
+  --color-outline: #899391;
+  --color-outline-variant: #3f4947;
+  --color-hairline: #3f4947;
+
+  --color-danger: #ffb4ab;
+  --color-danger-container: #93000a;
+  --color-on-danger-container: #ffdad6;
 }
 
 /* Base Styles */
 @layer base {
+  /*
+   * The page background lives on <html>, not on a wrapper div.
+   *
+   * App.jsx used to carry `bg-secondary-light dark:bg-slate-950`. Those two
+   * utilities have identical specificity — `:where()` in the dark variant adds
+   * none — so which one won came down to emitted source order, and the theme
+   * could silently fail to flip. Declaring it once here removes the race, and
+   * the canvas colour is the root element's job anyway.
+   */
   html {
     scroll-behavior: smooth;
+    background-color: var(--color-surface);
+    color: var(--color-ink);
   }
 
+  /* One family across both scripts — the Arabic cut shares IBM Plex's vertical
+     metrics, so a bilingual line needs no per-direction override. Body copy
+     runs at 1.6 line-height for the generous, unhurried feel the system asks
+     for. */
   body {
-    font-family: 'Inter', 'Cairo', sans-serif;
+    font-family: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    line-height: 1.6;
+    /* Transparent so <html>'s colour shows through — one source of truth. */
+    background-color: transparent;
+    color: inherit;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  [dir="rtl"] body {
-    font-family: 'Cairo', 'Inter', sans-serif;
+  /* Small labels and overlines read as "tech-spec" clarity. */
+  .label-tech {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
   /*
@@ -118,59 +239,92 @@
 }
 
 @layer components {
-  /* Primary button */
+  /*
+   * Primary button — solid Cyprus, no shadow at rest, a subtle lift on hover.
+   * `text-on-primary` rather than a literal white: dark mode flips the fill to
+   * a light mint where white text would read at about 2:1.
+   */
   .btn-primary {
-    @apply bg-primary text-white px-6 py-3 rounded-xl font-medium
+    @apply bg-primary text-on-primary px-6 py-3 rounded-xl font-medium
            hover:bg-primary-light active:bg-primary-dark
-           transition-all duration-200 shadow-sm hover:shadow-md
+           transition-all duration-200
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  /* The dark-theme teal is light, so white text on it fails contrast badly
-     (~1.9:1). Near-black text on the same fill reads at roughly 9:1. */
-  .dark .btn-primary {
-    color: #04211f;
-  }
-
-  /* Secondary button */
+  /* Secondary — transparent with a Cyprus hairline, per the spec. */
   .btn-secondary {
-    @apply bg-secondary text-primary px-6 py-3 rounded-xl font-medium
-           hover:bg-secondary-dark active:bg-secondary-dark
-           transition-all duration-200 border border-primary/10;
-  }
-
-  .dark .btn-secondary {
-    @apply bg-slate-800 text-primary border-slate-700 hover:bg-slate-700;
+    @apply bg-transparent text-primary px-6 py-3 rounded-xl font-medium
+           border border-primary/40 hover:bg-primary/5 active:bg-primary/10
+           transition-all duration-200;
   }
 
   /* Ghost button */
   .btn-ghost {
-    @apply px-6 py-3 rounded-xl font-medium text-primary 
+    @apply px-6 py-3 rounded-xl font-medium text-primary
            hover:bg-primary/5 active:bg-primary/10
            transition-all duration-200;
   }
 
-  /* Card — one step lighter than the page (slate-950), not two, so panels read
-     as raised without the jump the old slate-800 gave. */
+  /*
+   * Card — Level 1 of the tonal ladder: one step off the page, a 1px hairline,
+   * and a shadow tinted with Cyprus rather than pure black so the elevation
+   * reads warm instead of grey.
+   */
   .card {
-    @apply bg-white dark:bg-slate-900 rounded-2xl shadow-sm
-           border border-gray-100 dark:border-slate-800
-           hover:shadow-md transition-shadow duration-300;
+    background-color: var(--color-surface-lowest);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 1px 2px rgba(0, 71, 65, 0.04), 0 2px 8px rgba(0, 71, 65, 0.03);
+    transition: box-shadow 300ms ease, background-color 200ms ease, border-color 200ms ease;
   }
 
-  /* Input */
+  .card:hover {
+    box-shadow: 0 2px 4px rgba(0, 71, 65, 0.06), 0 8px 24px rgba(0, 71, 65, 0.05);
+  }
+
+  /* On a dark page the tint disappears, so depth comes from tone alone. */
+  .dark .card {
+    background-color: var(--color-surface-raised);
+    box-shadow: none;
+  }
+
+  .dark .card:hover {
+    background-color: var(--color-surface-high);
+  }
+
+  /* Input — 4px corners, 1px stroke, and a 2px Cyprus glow on focus. */
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700
-           bg-white dark:bg-slate-800/80 text-gray-900 dark:text-white
-           placeholder:text-gray-400 dark:placeholder:text-slate-500
-           focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
-           transition-all duration-200;
+    @apply w-full px-4 py-3 rounded-md
+           focus:outline-none transition-all duration-200;
+    background-color: var(--color-surface-lowest);
+    border: 1px solid var(--color-outline-variant);
+    color: var(--color-ink);
+  }
+
+  .input-field::placeholder {
+    color: var(--color-outline);
+  }
+
+  .input-field:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  .input-field:disabled {
+    background-color: var(--color-surface-raised);
+    color: var(--color-outline);
+    cursor: not-allowed;
+  }
+
+  .dark .input-field {
+    background-color: var(--color-surface-low);
   }
 
   /* Section title */
   .section-title {
-    @apply text-3xl md:text-4xl font-bold text-gray-900 dark:text-white
-           tracking-tight leading-tight;
+    @apply text-3xl md:text-4xl font-medium text-gray-900 dark:text-white
+           leading-tight;
+    letter-spacing: -0.02em;
   }
 
   /* Section subtitle */
@@ -250,29 +404,92 @@
   50%      { opacity: 0.6; }
 }
 
+/* Used by overlays that render conditionally rather than through
+   AnimatePresence, so there is no exit animation to strand a node. */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Vapour leaving the surface: rises, widens, fades. */
+@keyframes deco-rise {
+  0%   { transform: translateY(12%) scale(0.92); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateY(-14%) scale(1.08); opacity: 0; }
+}
+
+/* Lateral drift for curls, so trails do not all lean the same way. */
+@keyframes deco-sway {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  50%      { transform: translateX(3%) rotate(-2.5deg); }
+}
+
+/* Slow rotation for rings and coils. */
+@keyframes deco-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Liquid droplets rising through a pod. */
+@keyframes deco-bubble {
+  0%   { transform: translateY(0) scale(0.85); opacity: 0; }
+  20%  { opacity: 0.9; }
+  100% { transform: translateY(-190%) scale(1.15); opacity: 0; }
+}
+
+/* A dashed stroke travelling along its own path. */
+@keyframes deco-trace {
+  to { stroke-dashoffset: -220; }
+}
+
+.deco-drift,
+.deco-float,
+.deco-pulse,
+.deco-rise,
+.deco-sway,
+.deco-spin,
+.deco-bubble,
+.deco-trace {
+  will-change: transform, opacity;
+  contain: paint;
+}
+
+.deco-rise   { animation: deco-rise 14s ease-in-out infinite; }
+.deco-sway   { animation: deco-sway 11s ease-in-out infinite; }
+.deco-spin   { animation: deco-spin 70s linear infinite; transform-origin: center; }
+.deco-bubble { animation: deco-bubble 9s ease-in infinite; }
+.deco-trace  { animation: deco-trace 18s linear infinite; }
+
 /*
  * will-change promotes each shape to its own compositor layer, so the blur is
  * rasterised once and the animation is a GPU transform. Without it the browser
  * re-blurs a 600px area every frame, which is what made the page feel heavy.
  */
-.deco-drift,
-.deco-float,
-.deco-pulse {
-  will-change: transform, opacity;
-  contain: paint;
-}
-
 .deco-drift { animation: deco-drift 26s ease-in-out infinite; }
 .deco-float { animation: deco-float 9s ease-in-out infinite; }
 .deco-pulse { animation: deco-pulse 7s ease-in-out infinite; }
 
 /* Honour the OS setting — for some people this kind of motion causes real
-   discomfort, and none of it carries information. */
+   discomfort, and none of it carries information. The shapes stay; only the
+   movement stops, so the composition is unchanged. */
 @media (prefers-reduced-motion: reduce) {
   .deco-drift,
   .deco-float,
-  .deco-pulse {
-    animation: none;
+  .deco-pulse,
+  .deco-rise,
+  .deco-sway,
+  .deco-spin,
+  .deco-bubble,
+  .deco-trace {
+    animation: none !important;
+  }
+
+  /* Rise and bubble start at opacity 0, so without their animation they would
+     be invisible rather than static. Put them back at rest. */
+  .deco-rise,
+  .deco-bubble {
+    opacity: 1;
+    transform: none;
   }
 
   *, *::before, *::after {

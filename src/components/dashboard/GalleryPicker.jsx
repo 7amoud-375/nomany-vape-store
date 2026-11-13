@@ -7,6 +7,17 @@ const GalleryPicker = ({ isOpen, onClose, onSelect, language = "ar" }) => {
   const { products, categories, brands, banners, offers } = useData();
   const [searchQuery, setSearchQuery] = useState("");
 
+  /*
+   * A real upload from api/upload.php comes back as a root-relative path —
+   * "/uploads/xyz.jpg", not an absolute URL — so the app stays portable
+   * across localhost, www/non-www and http-before-the-certificate (see
+   * normalise_image_url() in api/index.php). This picker used to only accept
+   * a src starting with "data:image" or "http", which every real uploaded
+   * image fails: the gallery read "No images available" no matter how many
+   * products had photos. Any non-empty string is a valid <img src>.
+   */
+  const isUsableImage = (src) => typeof src === "string" && src.trim() !== "";
+
   // Collect all images from the app
   const allImages = useMemo(() => {
     const images = new Set();
@@ -14,7 +25,7 @@ const GalleryPicker = ({ isOpen, onClose, onSelect, language = "ar" }) => {
     // Product images
     products.forEach((p) => {
       p.images?.forEach((img) => {
-        if (img && (img.startsWith("data:image") || img.startsWith("http"))) {
+        if (isUsableImage(img)) {
           images.add({ src: img, source: language === "ar" ? "منتج" : "Product", name: p.nameAr || p.nameEn });
         }
       });
@@ -22,28 +33,28 @@ const GalleryPicker = ({ isOpen, onClose, onSelect, language = "ar" }) => {
 
     // Category images
     categories.forEach((c) => {
-      if (c.image && (c.image.startsWith("data:image") || c.image.startsWith("http"))) {
+      if (isUsableImage(c.image)) {
         images.add({ src: c.image, source: language === "ar" ? "قسم" : "Category", name: c.nameAr || c.nameEn });
       }
     });
 
     // Brand logos
     brands.forEach((b) => {
-      if (b.logo && (b.logo.startsWith("data:image") || b.logo.startsWith("http"))) {
+      if (isUsableImage(b.logo)) {
         images.add({ src: b.logo, source: language === "ar" ? "ماركة" : "Brand", name: b.name });
       }
     });
 
     // Banner images
     banners.forEach((b) => {
-      if (b.image && (b.image.startsWith("data:image") || b.image.startsWith("http"))) {
+      if (isUsableImage(b.image)) {
         images.add({ src: b.image, source: language === "ar" ? "بنر" : "Banner", name: b.titleAr || b.titleEn });
       }
     });
 
     // Offer images
     offers.forEach((o) => {
-      if (o.image && (o.image.startsWith("data:image") || o.image.startsWith("http"))) {
+      if (isUsableImage(o.image)) {
         images.add({ src: o.image, source: language === "ar" ? "عرض" : "Offer", name: o.titleAr || o.titleEn });
       }
     });
@@ -100,7 +111,7 @@ const GalleryPicker = ({ isOpen, onClose, onSelect, language = "ar" }) => {
                     {img.name}
                   </span>
                 </div>
-                <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary/80 text-white text-[10px]">
+                <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary/80 text-on-primary text-[10px]">
                   {img.source}
                 </span>
               </button>

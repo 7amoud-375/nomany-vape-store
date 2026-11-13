@@ -1,0 +1,20 @@
+# https://nomany-vape-store.com
+
+User-agent: *
+Allow: /
+
+# Nothing here is useful in an index, and the cart/checkout pages are
+# per-visitor state rather than content.
+Disallow: /cart
+Disallow: /checkout
+Disallow: /wishlist
+Disallow: /search
+Disallow: /api/
+Disallow: /uploads/
+
+# The dashboard sign-in path is deliberately not listed here. Naming it in
+# robots.txt would publish the one thing keeping it out of sight; robots.txt is
+# world-readable and is the first file a scanner fetches. It is unlinked and
+# absent from the sitemap, which is what actually keeps it out of the index.
+
+Sitemap: https://nomany-vape-store.com/sitemap.xml

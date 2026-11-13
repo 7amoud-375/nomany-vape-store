@@ -50,3 +50,7 @@ build-package/
 
 # FTP deploy credentials
 .env.deploy
+ 
+.claude/ 
+nomany-deploy/ 
+nomany-site-only.zip

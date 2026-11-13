@@ -6,7 +6,6 @@ import {
   DollarSign,
   Percent,
   AlertTriangle,
-  Users,
   Clock,
   Filter,
   TrendingUp,
@@ -71,24 +70,22 @@ const DashboardOverview = () => {
   // Calculate real stats for selected period
   const periodStats = useMemo(() => {
     const validOrders = filteredOrders.filter(o => o != null && o.total != null);
-    
-    const totalRevenue = validOrders
-      .filter((o) => o.status !== "cancelled")
-      .reduce((sum, o) => sum + (o.total || 0), 0);
+
+    // There is no fulfilment status any more (see constants/index.js), so
+    // every valid order counts towards revenue.
+    const totalRevenue = validOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
     const totalOrders = validOrders.length;
-    const pendingOrders = validOrders.filter((o) => o.status === "pending").length;
-    const deliveredOrders = validOrders.filter((o) => o.status === "delivered").length;
-
-    // Unique customers by phone
-    const uniqueCustomers = [...new Set(validOrders.map((o) => o.phone).filter(Boolean))].length;
+    // Payment is the one order state this shop tracks — set by the admin
+    // from Dashboard -> Orders (Mark as paid).
+    const paidOrders = validOrders.filter((o) => o.paymentStatus === "paid").length;
+    const unpaidOrders = totalOrders - paidOrders;
 
     return {
       totalRevenue,
       totalOrders,
-      pendingOrders,
-      deliveredOrders,
-      uniqueCustomers,
+      paidOrders,
+      unpaidOrders,
     };
   }, [filteredOrders]);
 
@@ -104,9 +101,7 @@ const DashboardOverview = () => {
     const prevMonthKey = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
 
     const prevOrders = orders.filter((o) => o && o.date && o.date.substring(0, 7) === prevMonthKey);
-    const prevRevenue = prevOrders
-      .filter((o) => o.status !== "cancelled")
-      .reduce((sum, o) => sum + (o.total || 0), 0);
+    const prevRevenue = prevOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
     const currentRevenue = periodStats.totalRevenue;
     const currentOrders = periodStats.totalOrders;
@@ -156,18 +151,17 @@ const DashboardOverview = () => {
       render: (order) => <span className="font-bold">{formatPrice(order.total || 0, language)}</span>,
     },
     {
-      key: "status",
-      header: language === "ar" ? "الحالة" : "Status",
+      key: "paymentStatus",
+      header: language === "ar" ? "الدفع" : "Payment",
       render: (order) => (
         <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-          order.status === "delivered" ? "bg-green-100 text-green-700" :
-          order.status === "pending" ? "bg-yellow-100 text-yellow-700" :
-          order.status === "shipped" ? "bg-blue-100 text-blue-700" :
-          order.status === "confirmed" ? "bg-blue-100 text-blue-700" :
-          order.status === "preparing" ? "bg-purple-100 text-purple-700" :
-          "bg-gray-100 text-gray-700"
+          order.paymentStatus === "paid"
+            ? "bg-green-100 text-green-700"
+            : "bg-amber-100 text-amber-700"
         }`}>
-          {t(order.status) || order.status || "pending"}
+          {order.paymentStatus === "paid"
+            ? language === "ar" ? "مدفوع" : "Paid"
+            : language === "ar" ? "غير مدفوع" : "Unpaid"}
         </span>
       ),
     },
@@ -212,14 +206,8 @@ const DashboardOverview = () => {
           trendUp={trends ? trends.revenue.up : null}
         />
         <StatsCard
-          title={language === "ar" ? "العملاء" : "Customers"}
-          value={periodStats.uniqueCustomers}
-          icon={Users}
-          color="purple"
-        />
-        <StatsCard
-          title={language === "ar" ? "تم التوصيل" : "Delivered"}
-          value={periodStats.deliveredOrders}
+          title={language === "ar" ? "مدفوعة" : "Paid"}
+          value={periodStats.paidOrders}
           icon={Package}
           color="primary"
         />
@@ -234,8 +222,8 @@ const DashboardOverview = () => {
           color="orange"
         />
         <StatsCard
-          title={language === "ar" ? "طلبات معلقة" : "Pending Orders"}
-          value={periodStats.pendingOrders}
+          title={language === "ar" ? "غير مدفوعة" : "Unpaid Orders"}
+          value={periodStats.unpaidOrders}
           icon={AlertTriangle}
           color="red"
         />

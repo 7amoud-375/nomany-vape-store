@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronRight, RotateCcw, ShieldCheck, Clock, Truck } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
+import SectionDecoration from "../../components/common/SectionDecoration";
 import { useData } from "../../context/DataContext";
 import { settings as defaultSettings } from "../../data/settings";
 
@@ -49,7 +50,9 @@ const ReturnPolicyPage = () => {
   ];
 
   return (
-    <div className="pt-24 pb-20">
+    <div className="relative overflow-hidden pt-24 pb-20">
+      <SectionDecoration variant="trace" position="top-end" size="w-72 h-72" tone="text-primary" motion="none" />
+      <SectionDecoration variant="rings" position="bottom-start" size="w-64 h-64" tone="text-accent" />
       <div className="container-custom max-w-3xl">
         <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-8">
           <Link to="/" className="hover:text-primary transition-colors">

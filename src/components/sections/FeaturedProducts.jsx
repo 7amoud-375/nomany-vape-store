@@ -22,6 +22,21 @@ const FeaturedProducts = () => {
   return (
     <section className="relative overflow-hidden py-20 bg-white dark:bg-slate-900">
       <SectionDecoration variant="dots" position="top-end" size="w-80 h-80" tone="text-primary" />
+      <SectionDecoration
+        variant="plume"
+        position="bottom-start"
+        size="w-72 h-[22rem]"
+        tone="text-primary"
+        motion="none"
+      />
+      <SectionDecoration
+        variant="waves"
+        position="mid-start"
+        size="w-full h-40"
+        tone="text-accent"
+        motion="none"
+        className="opacity-[0.05] dark:opacity-[0.08]"
+      />
       <div className="container-custom">
         <div className="flex items-end justify-between mb-12">
           <div className="text-left">

@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
 import SectionDecoration from "../../components/common/SectionDecoration";
 import { motion } from "framer-motion";
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, RotateCcw } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
-import { useData } from "../../context/DataContext"; // ADDED: Import useData
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, toNumber, productImage, effectivePrice } from "../../utils";
+import { formatPrice, productImage, effectivePrice, flavorLabel, hasFlavors } from "../../utils";
 import Button from "../../components/ui/Button";
 import toast from "react-hot-toast";
 
@@ -15,13 +14,8 @@ const PLACEHOLDER = "https://placehold.co/100x100/004741/FFFFFF?text=%20";
 const CartPage = () => {
   const { language } = useLanguage();
   const { cartItems, updateQuantity, removeFromCart, cartTotal, clearCart } = useCart();
-  const { settings } = useData(); // ADDED: Get settings from database
   const { t } = useTranslations();
   const isRtl = language === "ar";
-
-  // CHANGED: Calculate dynamic shipping cost from settings
-  const shippingCost = cartItems.length > 0 ? toNumber(settings?.shippingCost) : 0;
-  const finalTotal = cartTotal + shippingCost;
 
   const handleClearCart = () => {
     clearCart();
@@ -46,6 +40,13 @@ const CartPage = () => {
   return (
     <div className="relative overflow-hidden pt-24 pb-20">
       <SectionDecoration variant="dots" position="top-end" size="w-72 h-72" tone="text-primary" />
+      <SectionDecoration
+        variant="trace"
+        position="bottom-start"
+        size="w-64 h-64"
+        tone="text-accent"
+        motion="none"
+      />
       <div className="container-custom">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">{t("yourCart")}</h1>
 
@@ -54,7 +55,7 @@ const CartPage = () => {
           <div className="lg:col-span-2 space-y-4">
             {cartItems.map((item, index) => (
               <motion.div
-                key={item.id}
+                key={item.lineKey}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
@@ -76,6 +77,22 @@ const CartPage = () => {
                     {isRtl ? item.nameAr : item.nameEn}
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{item.brand}</p>
+                  {item.selectedFlavor && (
+                    <p className="mb-2 text-sm font-medium text-primary">
+                      {isRtl ? "الطعم: " : "Flavour: "}
+                      {flavorLabel(item.selectedFlavor, language)}
+                    </p>
+                  )}
+                  {/* Added before flavours were selectable — the customer picks
+                      one on the product page, and the old line is replaced. */}
+                  {hasFlavors(item) && !item.selectedFlavor && (
+                    <Link
+                      to={`/products/${item.id}`}
+                      className="mb-2 inline-block text-sm font-medium text-red-500 underline"
+                    >
+                      {isRtl ? "اختر الطعم لهذا المنتج" : "Choose a flavour for this product"}
+                    </Link>
+                  )}
                   <p className="font-bold text-primary">
                     {formatPrice(effectivePrice(item), language)}
                   </p>
@@ -83,7 +100,7 @@ const CartPage = () => {
 
                 <div className="flex flex-col items-end justify-between">
                   <button
-                    onClick={() => removeFromCart(item.id)}
+                    onClick={() => removeFromCart(item.lineKey)}
                     className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -91,14 +108,14 @@ const CartPage = () => {
 
                   <div className="flex items-center border border-gray-200 dark:border-slate-600 rounded-xl overflow-hidden">
                     <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      onClick={() => updateQuantity(item.lineKey, item.quantity - 1)}
                       className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
                     <span className="w-8 text-center font-semibold text-sm">{item.quantity}</span>
                     <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      onClick={() => updateQuantity(item.lineKey, item.quantity + 1)}
                       className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700"
                     >
                       <Plus className="w-4 h-4" />
@@ -127,21 +144,32 @@ const CartPage = () => {
                   <span className="text-gray-500 dark:text-gray-400">{t("subtotal")}</span>
                   <span className="font-medium">{formatPrice(cartTotal, language)}</span>
                 </div>
-                
-                {/* CHANGED: Show Dynamic Shipping Cost */}
+
+                {/*
+                  Delivery is priced per area now, chosen at checkout — showing
+                  a flat number here before that choice exists would either be
+                  wrong for most areas or would need to guess one, and either
+                  way it does not match what the customer is actually charged.
+                */}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">{isRtl ? "التوصيل" : "Shipping"}</span>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {formatPrice(shippingCost, language)}
+                  <span className="text-gray-400 dark:text-gray-500">
+                    {isRtl ? "بيتحدد في صفحة الدفع" : "Calculated at checkout"}
                   </span>
                 </div>
 
                 <div className="border-t border-gray-100 dark:border-slate-700 pt-3">
                   <div className="flex justify-between">
-                    <span className="font-bold text-gray-900 dark:text-white">{t("total")}</span>
-                    {/* CHANGED: Show finalTotal instead of cartTotal */}
-                    <span className="font-bold text-primary text-xl">{formatPrice(finalTotal, language)}</span>
+                    <span className="font-bold text-gray-900 dark:text-white">
+                      {isRtl ? "الإجمالي قبل التوصيل" : "Total before delivery"}
+                    </span>
+                    <span className="font-bold text-primary text-xl">{formatPrice(cartTotal, language)}</span>
                   </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {isRtl
+                      ? "+ سعر التوصيل حسب المنطقة اللي هتختارها"
+                      : "+ delivery fee, based on the area you choose"}
+                  </p>
                 </div>
               </div>
 
@@ -151,6 +179,15 @@ const CartPage = () => {
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
+
+              {/* Visible before payment, not just buried in the footer — a
+                  clear link to the refund policy here. */}
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <Link to="/return-policy" className="underline hover:text-primary transition-colors">
+                  {isRtl ? "سياسة الاستبدال والاسترجاع" : "Return & Refund Policy"}
+                </Link>
+              </p>
 
               <Link
                 to="/products"

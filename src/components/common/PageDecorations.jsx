@@ -86,6 +86,49 @@ const Receipt = () => (
   </svg>
 );
 
+/**
+ * Flavour-toned ambient shapes for category and product browsing.
+ *
+ * Three overlapping washes in the brand's own hues rather than literal fruit or
+ * flavour imagery, which would date badly and fight the product photography.
+ */
+const FlavourFields = () => (
+  <>
+    <div
+      aria-hidden="true"
+      className="absolute top-[12%] start-[8%] w-[30rem] h-[30rem] rounded-full blur-3xl
+                 bg-primary/10 dark:bg-primary/15 deco-drift"
+      style={{ animationDuration: "34s" }}
+    />
+    <div
+      aria-hidden="true"
+      className="absolute top-[42%] end-[4%] w-[24rem] h-[24rem] rounded-full blur-3xl
+                 bg-accent/10 dark:bg-accent/15 deco-drift"
+      style={{ animationDuration: "42s", animationDelay: "6s" }}
+    />
+    <svg
+      className="absolute bottom-0 inset-x-0 w-full h-[220px] opacity-[0.05] dark:opacity-[0.09] text-primary"
+      viewBox="0 0 400 120"
+      fill="none"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {[0, 1, 2].map((i) => (
+        <path
+          key={i}
+          className="deco-sway"
+          style={{ animationDelay: `${i * 2.1}s`, animationDuration: `${12 + i * 3}s` }}
+          d={`M0 ${44 + i * 24} C 70 ${20 + i * 24}, 130 ${68 + i * 24}, 200 ${44 + i * 24}
+              S 330 ${20 + i * 24}, 400 ${44 + i * 24}`}
+          stroke="currentColor"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  </>
+);
+
 /** Concentric rings for informational pages. */
 const Rings = () => (
   <svg
@@ -109,6 +152,11 @@ const PageDecorations = () => {
   const isHome = pathname === "/";
   const isOffers = pathname.startsWith("/offers");
   const isCart = pathname.startsWith("/cart") || pathname.startsWith("/checkout");
+  const isBrowse =
+    pathname.startsWith("/categories") ||
+    pathname.startsWith("/products") ||
+    pathname.startsWith("/search") ||
+    pathname.startsWith("/wishlist");
   const isInfo =
     pathname.startsWith("/about") ||
     pathname.startsWith("/contact") ||
@@ -133,11 +181,24 @@ const PageDecorations = () => {
       {isHome && <VapourTrails />}
       {isOffers && <PriceTags />}
       {isCart && <Receipt />}
+      {isBrowse && <FlavourFields />}
       {isInfo && <Rings />}
 
-      {/* Fades the decoration out behind the content column so text keeps its
-          contrast regardless of what is drifting underneath. */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-secondary-light/60 to-secondary-light dark:via-slate-950/60 dark:to-slate-950" />
+      {/*
+        Fades the decoration out behind the content column so text keeps its
+        contrast regardless of what is drifting underneath.
+
+        The stops are the surface token itself rather than a named colour, so
+        the scrim resolves to exactly the page background in both themes — a
+        near-match leaves a faint band where the gradient ends.
+      */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, transparent 0%, color-mix(in srgb, var(--color-surface) 60%, transparent) 55%, var(--color-surface) 100%)",
+        }}
+      />
     </div>
   );
 };

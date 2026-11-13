@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Heart, ShoppingCart, Eye } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { useTranslations } from "../../hooks/useTranslations";
-import { formatPrice, calculateDiscount, effectivePrice, productImage } from "../../utils";
+import { formatPrice, calculateDiscount, effectivePrice, productImage, hasFlavors } from "../../utils";
 import Badge from "../ui/Badge";
 import Modal from "../ui/Modal";
 
@@ -15,6 +15,7 @@ const PLACEHOLDER = "https://placehold.co/400x400/004741/FFFFFF?text=Nomany";
 const ProductCard = ({ product, index = 0 }) => {
   const { language } = useLanguage();
   const { addToCart } = useCart();
+  const navigate = useNavigate();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { t } = useTranslations();
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
@@ -25,10 +26,19 @@ const ProductCard = ({ product, index = 0 }) => {
   const discount = calculateDiscount(product.price, product.discountPrice);
   const inWishlist = isInWishlist(product.id);
   const image = productImage(product) || PLACEHOLDER;
+  const chooseFlavorLabel = language === "ar" ? "اختر الطعم" : "Choose flavour";
 
+  const needsFlavor = hasFlavors(product);
+
+  /** A liquid needs its flavour chosen, which only the product page offers. */
   const handleAddToCart = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (needsFlavor) {
+      setIsQuickViewOpen(false);
+      navigate(`/products/${product.id}`);
+      return;
+    }
     addToCart(product);
   };
 
@@ -93,7 +103,7 @@ const ProductCard = ({ product, index = 0 }) => {
                 </button>
                 <button
                   onClick={handleQuickView}
-                  className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-white shadow-sm transition-colors flex items-center justify-center"
+                  className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-primary hover:text-on-primary shadow-sm transition-colors flex items-center justify-center"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
@@ -107,7 +117,7 @@ const ProductCard = ({ product, index = 0 }) => {
                   className="w-full btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
                 >
                   <ShoppingCart className="w-4 h-4" />
-                  {t("addToCart")}
+                  {needsFlavor ? chooseFlavorLabel : t("addToCart")}
                 </button>
               </div>
             </div>
@@ -158,15 +168,12 @@ const ProductCard = ({ product, index = 0 }) => {
             </p>
             <div className="flex gap-3 mt-auto">
               <button
-                onClick={() => {
-                  addToCart(product);
-                  setIsQuickViewOpen(false);
-                }}
+                onClick={handleAddToCart}
                 disabled={!product.availability}
                 className="flex-1 btn-primary flex items-center justify-center gap-2"
               >
                 <ShoppingCart className="w-5 h-5" />
-                {t("addToCart")}
+                {needsFlavor ? chooseFlavorLabel : t("addToCart")}
               </button>
               <button
                 onClick={() => toggleWishlist(product)}

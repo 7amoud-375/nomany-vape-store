@@ -23,6 +23,21 @@ const WhyChooseUs = () => {
   return (
     <section className="relative overflow-hidden py-20 bg-white dark:bg-slate-900">
       <SectionDecoration variant="rings" position="bottom-end" size="w-72 h-72" tone="text-primary" />
+      <SectionDecoration
+        variant="trace"
+        position="top-start"
+        size="w-72 h-72"
+        tone="text-accent"
+        motion="none"
+      />
+      <SectionDecoration
+        variant="hex"
+        position="mid-end"
+        size="w-[22rem] h-[22rem]"
+        tone="text-primary"
+        motion="none"
+        className="opacity-[0.04] dark:opacity-[0.07]"
+      />
       <div className="container-custom">
         <SectionTitle
           title={language === "ar" ? homepage.whyChooseUs.titleAr : homepage.whyChooseUs.titleEn}

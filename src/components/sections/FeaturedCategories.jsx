@@ -17,6 +17,21 @@ const FeaturedCategories = () => {
   return (
     <section className="relative overflow-hidden py-20">
       <SectionDecoration variant="arcs" position="bottom-start" size="w-72 h-72" tone="text-primary" />
+      <SectionDecoration
+        variant="hex"
+        position="top-end"
+        size="w-[26rem] h-[26rem]"
+        tone="text-primary"
+        motion="none"
+        className="opacity-[0.04] dark:opacity-[0.07]"
+      />
+      <SectionDecoration
+        variant="sparks"
+        position="mid-end"
+        size="w-52 h-52"
+        tone="text-accent"
+        motion="none"
+      />
       <div className="container-custom">
         <SectionTitle
           title={language === "ar" ? homepage.featuredCategories.titleAr : homepage.featuredCategories.titleEn}

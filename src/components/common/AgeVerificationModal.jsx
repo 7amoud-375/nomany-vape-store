@@ -76,7 +76,7 @@ const AgeVerificationModal = () => {
               </button>
               <button
                 onClick={handleYes}
-                className="flex-1 py-3 rounded-xl bg-primary text-white font-medium hover:opacity-90 transition-opacity"
+                className="flex-1 py-3 rounded-xl bg-primary text-on-primary font-medium hover:opacity-90 transition-opacity"
               >
                 {isRtl ? "نعم، عمري 18+" : "Yes, I'm 18+"}
               </button>
